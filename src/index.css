@@ -1,0 +1,62 @@
+﻿@import "tailwindcss";
+@theme {
+  --font-sans: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-brand-50: #f4f1ff;
+  --color-brand-100: #ebe5ff;
+  --color-brand-500: #8061d5;
+  --color-brand-600: #6d4cc4;
+  --color-ink: #262735;
+}
+@layer base {
+  body {
+    @apply m-0 bg-[#f7f8fb] font-sans text-sm text-ink antialiased;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    @apply cursor-pointer;
+  }
+  button:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+  button:focus-visible,
+  a:focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+  input,
+  textarea,
+  select {
+    @apply accent-brand-600;
+  }
+  ::selection {
+    @apply bg-brand-100;
+  }
+}
+@layer utilities {
+  .thin-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #dedee8 transparent;
+  }
+}
+@layer components {
+  .field {
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50;
+  }
+  .card {
+    @apply rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-7;
+  }
+  .field-label {
+    @apply mb-1.5 block text-xs font-medium text-slate-600;
+  }
+}
