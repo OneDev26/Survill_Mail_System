@@ -1,0 +1,56 @@
+# Zoho Mail inspired workspace
+
+Responsive React, Tailwind CSS v4, Redux Toolkit, and React Router app with a local demo account and seeded data. No real email is sent.
+
+## Start
+
+```sh
+npm install
+npm run dev
+```
+
+Login: **alex.morgan@studio.co** / **Demo@1234**. The login page also has a Fill demo credentials button.
+
+```sh
+npm run build
+npm run lint
+npm test
+npm run format:check
+```
+
+Browser tests use installed Microsoft Edge on Windows. On other platforms run `npx playwright install chromium` first. Set `PW_BROWSER_CHANNEL` to select another installed Chromium browser. Tests start a separate Vite server on port 4173 and use fresh browser contexts, without changing your personal browser data.
+
+## Features
+
+- Protected routes, demo sign-in validation, password visibility, remember-me sessions, account menu, logout, and demo access help.
+- Editable profile and avatar upload/preview/removal, reflected across the workspace.
+- Folder/label navigation, search, unread/starred/attachment filters, sort, pagination, bulk selection, read/unread, archive, spam, trash, restore, move, labels, and undo.
+- Confirmed permanent deletion and empty trash; configurable trash confirmation.
+- Compose, Cc/Bcc, contacts suggestions, reply/reply-all/forward, signatures, debounced draft autosave, manual save/discard, attachments/downloads, Ctrl/Cmd+Enter to send.
+- Custom folders/labels and persistent inbox preferences.
+- Contacts, tasks, notes, and monthly calendar: create/edit/delete, validation, search, and persistence.
+- Mobile navigation, responsive reading pane, accessible native dialogs, focus restoration, notifications, and empty states.
+
+## Structure
+
+```text
+src/
+  api/          Demo authentication, data, storage, future axios client
+  components/   Shared layout, mail components, compose, dialogs, editor
+  pages/        Login, mail, profile, settings, workspace pages
+  redux/
+    slice/      auth, profile, mail, settings, workspace, ui
+    thunks/     Guidance for future async API workflows
+    store.js    Store configuration, hydration, persistence
+  utils/        Pure mail filtering and recipient helpers
+tests/          Browser workflow tests
+docs/           API integration guide
+```
+
+See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md). Domain state is separated into slices; no network thunks or fabricated HTTP endpoints run in the demo.
+
+## Demo boundaries
+
+One fixed account is supported. Login is client-side simulation; password-recovery help does not send email. Local data remains after logout so the same account can resume. Attachments are limited to 1 MB per message; avatars to 200 KB. Calendar events are local, same-day events without recurrence or invitations. Delivery, synchronization, real security, and multiple accounts require a backend.
+
+Storage uses `zoho-demo-v2:` keys and imports valid older mailbox data. Storage failure displays a persistent warning and the app continues in memory. Clear this site's browser storage to reset demo data. Serve index.html for unknown application paths in production so direct routes like /profile work.
