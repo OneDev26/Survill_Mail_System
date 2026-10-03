@@ -1,4 +1,4 @@
-﻿import {
+import {
   Archive,
   ArrowDownWideNarrow,
   CheckCheck,
@@ -40,7 +40,7 @@ export default function MailList({
   return (
     <section
       aria-label="Message list"
-      className={`min-h-0 min-w-0 flex-1 flex-col bg-white ${reading ? "hidden lg:flex" : "flex"}`}
+      className={`mail-list flex min-h-0 min-w-0 flex-1 flex-col bg-white ${reading ? "mail-list-reading" : ""}`}
     >
       <div className="flex h-[70px] shrink-0 items-center justify-between px-5 lg:px-6">
         <div className="flex items-center gap-2.5">

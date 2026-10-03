@@ -147,6 +147,10 @@ export default function Sidebar({ onCompose, open, onClose }) {
                 {name}
               </NavLink>
             ))}
+            <NavLink to="/admin" onClick={onClose} className={linkClass}>
+              <ShieldAlert size={17} />
+              Admin console
+            </NavLink>
             <NavLink to="/settings" onClick={onClose} className={linkClass}>
               <Settings size={17} />
               Settings

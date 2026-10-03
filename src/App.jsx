@@ -14,6 +14,7 @@ import SettingsPage from "./pages/SettingsPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import AppLayout from "./components/AppLayout";
 import Notifications from "./components/Notifications";
+import AdminPage from "./pages/AdminPage";
 
 function ProtectedRoute() {
   const session = useSelector((state) => state.auth.session);
@@ -30,6 +31,11 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<Navigate to="/mail/Inbox" replace />} />
               <Route path="mail/:folder" element={<MailPage />} />
+              <Route
+                path="admin"
+                element={<Navigate to="/admin/overview" replace />}
+              />
+              <Route path="admin/:section" element={<AdminPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsPage />} />
               {["contacts", "tasks", "notes", "calendar"].map((page) => (

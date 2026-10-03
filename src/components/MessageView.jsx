@@ -1,4 +1,5 @@
-﻿import {
+import { useState } from "react";
+import {
   Archive,
   ArrowLeft,
   Download,
@@ -13,7 +14,24 @@
 } from "lucide-react";
 import { Avatar, IconButton, LabelBadge } from "./Ui";
 import { useSelector } from "react-redux";
-export default function MessageView({
+export default function MessageView(props) {
+  const [lastMessage, setLastMessage] = useState(props.message);
+  if (props.message && props.message !== lastMessage) {
+    setLastMessage(props.message);
+  }
+  const reading = Boolean(props.message);
+  return (
+    <div
+      className={`message-pane ${reading ? "message-pane-open" : ""}`}
+      aria-hidden={!reading}
+      inert={!reading}
+    >
+      <MessageContent {...props} message={props.message || lastMessage} />
+    </div>
+  );
+}
+
+function MessageContent({
   message,
   onClose,
   onAction,
@@ -23,20 +41,7 @@ export default function MessageView({
 }) {
   const labels = useSelector((state) => state.mail.labels);
   const ownEmail = useSelector((state) => state.profile.email);
-  if (!message)
-    return (
-      <section className="hidden w-[48%] flex-col items-center justify-center border-l border-slate-200/70 bg-[#fdfdff] px-10 text-center lg:flex">
-        <div className="mb-5 rounded-3xl bg-brand-50 p-6 text-brand-500">
-          <Mail size={40} strokeWidth={1} />
-        </div>
-        <h2 className="text-lg font-semibold">A little space to focus</h2>
-        <p className="mt-2 max-w-64 text-xs leading-6 text-slate-400">
-          Select a conversation to read it here.
-          <br />
-          Everything you need, right at your fingertips.
-        </p>
-      </section>
-    );
+  if (!message) return null;
   function download(attachment) {
     const url =
       attachment.dataUrl ||
@@ -54,7 +59,7 @@ export default function MessageView({
   return (
     <section
       aria-label="Message preview"
-      className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-slate-200/70 bg-white lg:w-[48%] lg:flex-none"
+      className="message-pane-content flex h-full min-h-0 min-w-0 flex-col border-l border-slate-200/70 bg-white"
     >
       <div className="flex h-[55px] shrink-0 items-center gap-1 border-b border-slate-200/70 px-4 lg:px-6">
         <IconButton

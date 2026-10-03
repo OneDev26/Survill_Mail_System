@@ -54,3 +54,7 @@ See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md). Domain state is separate
 One fixed account is supported. Login is client-side simulation; password-recovery help does not send email. Local data remains after logout so the same account can resume. Attachments are limited to 1 MB per message; avatars to 200 KB. Calendar events are local, same-day events without recurrence or invitations. Delivery, synchronization, real security, and multiple accounts require a backend.
 
 Storage uses `zoho-demo-v2:` keys and imports valid older mailbox data. Storage failure displays a persistent warning and the app continues in memory. Clear this site's browser storage to reset demo data. Serve index.html for unknown application paths in production so direct routes like /profile work.
+
+## Admin console
+
+Open **Admin console** in the sidebar for organization management. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, demo quarantine, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. All administration is local demo state; policies are not enforced by a server.

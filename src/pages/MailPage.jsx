@@ -253,7 +253,7 @@ function Mailbox({ folder, params, setParams }) {
           </button>
         )}
       </div>
-      <div className="flex min-h-0 flex-1">
+      <div className="mailbox-layout relative flex min-h-0 flex-1 overflow-hidden">
         <MailList
           messages={visible}
           total={filtered.length}

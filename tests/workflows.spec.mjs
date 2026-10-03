@@ -401,3 +401,37 @@ test("session-only login uses session storage and oversized files are rejected",
     });
   await expect(page.getByRole("alert")).toContainText("under 1 MB");
 });
+
+test("mail pane animates open and closed with full-width list restored", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await login(page);
+  const list = page.getByRole("region", { name: "Message list" });
+  const pane = page.locator(".message-pane");
+  const initial = await list.boundingBox();
+  await expect(pane).toBeHidden();
+  await page.getByRole("button", { name: /Sophia Chen/ }).click();
+  await expect(
+    page.getByRole("region", { name: "Message preview" }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await list.boundingBox()).width)
+    .toBeCloseTo(initial.width * 0.52, 0);
+  expect(
+    await pane.evaluate((node) => getComputedStyle(node).transitionDuration),
+  ).toContain("0.32s");
+  await page
+    .getByRole("button", { name: "Close message", exact: true })
+    .click();
+  await expect(pane).toHaveAttribute("inert", "");
+  await expect(pane.locator("h2")).toContainText("Website redesign");
+  await expect
+    .poll(async () => (await list.boundingBox()).width)
+    .toBeCloseTo(initial.width, 0);
+  await expect(pane).toBeHidden();
+  await page.getByRole("button", { name: /James Wilson/ }).click();
+  await expect(
+    page.getByRole("region", { name: "Message preview" }),
+  ).toContainText("A quick sync before the launch?");
+});

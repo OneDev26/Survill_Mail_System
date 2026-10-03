@@ -7,6 +7,8 @@ import workspace, { defaultWorkspace } from "./slice/workspaceSlice";
 import ui, { storageFailed } from "./slice/uiSlice";
 import { readStorage, writeStorage } from "../api/storage";
 import { loadMessages } from "../api/mailStorage";
+import admin from "./slice/adminSlice";
+import { defaultAdmin, validAdmin } from "../api/adminData";
 
 const validSession = (value) =>
   value?.session?.userId === "alex-morgan" &&
@@ -53,8 +55,9 @@ const persistedAuth =
   readStorage("auth", { session: null, remember: false }, validSession, true);
 const legacy = loadMessages();
 export const store = configureStore({
-  reducer: { mail, auth, profile, settings, workspace, ui },
+  reducer: { mail, auth, profile, settings, workspace, ui, admin },
   preloadedState: {
+    admin: readStorage("admin", defaultAdmin, validAdmin),
     mail: {
       ...readStorage(
         "mail",
@@ -102,7 +105,7 @@ store.subscribe(() => {
   const before = previous;
   previous = state;
   let success = true;
-  for (const key of ["mail", "profile", "settings", "workspace"]) {
+  for (const key of ["mail", "profile", "settings", "workspace", "admin"]) {
     if (before[key] !== state[key])
       success =
         writeStorage(
