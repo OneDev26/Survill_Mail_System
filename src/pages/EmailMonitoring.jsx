@@ -1,7 +1,20 @@
 ﻿import { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { createSelector } from "@reduxjs/toolkit";
-import { Eye, Search, Inbox, Paperclip, Download } from "lucide-react";
+import {
+  Eye,
+  Search,
+  Inbox,
+  Paperclip,
+  Download,
+  Mail,
+  MailOpen,
+  Users,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  Check,
+} from "lucide-react";
 import Dialog from "../components/Dialog";
 import { adminChanged } from "../redux/slice/adminSlice";
 
@@ -42,6 +55,13 @@ export default function EmailMonitoring() {
   const [folder, setFolder] = useState("");
   const [from, setFrom] = useState("");
   const [until, setUntil] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advanced, setAdvanced] = useState({
+    direction: "",
+    readState: "",
+    attachment: "",
+  });
+  const [advancedDraft, setAdvancedDraft] = useState(advanced);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   const all = useMemo(
@@ -60,6 +80,15 @@ export default function EmailMonitoring() {
   );
   const folders = [...new Set(all.map((message) => message.folder))].sort();
   const invalidDates = from && until && from > until;
+  const stats = useMemo(
+    () => ({
+      total: all.length,
+      received: all.filter((message) => message.folder === "Inbox").length,
+      unread: all.filter((message) => message.unread).length,
+      attachments: all.filter((message) => message.attachments?.length).length,
+    }),
+    [all],
+  );
   const rows = all.filter((message) => {
     const date = new Date(message.date);
     const localDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -69,6 +98,18 @@ export default function EmailMonitoring() {
       (!folder || message.folder === folder) &&
       (!from || localDate >= from) &&
       (!until || localDate <= until) &&
+      (!advanced.direction ||
+        (advanced.direction === "outgoing"
+          ? ["Sent", "Drafts"].includes(message.folder)
+          : !["Sent", "Drafts"].includes(message.folder))) &&
+      (!advanced.readState ||
+        (advanced.readState === "unread"
+          ? message.unread
+          : !message.unread)) &&
+      (!advanced.attachment ||
+        (advanced.attachment === "with"
+          ? message.attachments?.length > 0
+          : !message.attachments?.length)) &&
       [
         message.mailbox,
         message.email,
@@ -102,6 +143,21 @@ export default function EmailMonitoring() {
       }),
     );
   }
+  const advancedCount = Object.values(advanced).filter(Boolean).length;
+  function resetAdvanced() {
+    const empty = { direction: "", readState: "", attachment: "" };
+    setAdvancedDraft(empty);
+    setAdvanced(empty);
+    setPage(1);
+  }
+  function clearFilters() {
+    setQuery("");
+    setMailbox("");
+    setFolder("");
+    setFrom("");
+    setUntil("");
+    resetAdvanced();
+  }
   return (
     <>
       <div className="admin-section-heading">
@@ -123,6 +179,48 @@ export default function EmailMonitoring() {
         Permanently deleted messages and mail on other devices are not
         available. Each message opened here is recorded in the admin audit log.
       </div>
+      <section className="monitoring-stats" aria-label="Monitoring overview">
+        <article className="monitoring-stat-card">
+          <span className="monitoring-stat-icon">
+            <Mail size={18} />
+          </span>
+          <div>
+            <p>Total mail copies</p>
+            <strong>{stats.total}</strong>
+            <small>Across all local folders</small>
+          </div>
+        </article>
+        <article className="monitoring-stat-card">
+          <span className="monitoring-stat-icon blue">
+            <Inbox size={18} />
+          </span>
+          <div>
+            <p>Inbox copies</p>
+            <strong>{stats.received}</strong>
+            <small>Received across mailboxes</small>
+          </div>
+        </article>
+        <article className="monitoring-stat-card">
+          <span className="monitoring-stat-icon amber">
+            <MailOpen size={18} />
+          </span>
+          <div>
+            <p>Unread messages</p>
+            <strong>{stats.unread}</strong>
+            <small>Current unread state</small>
+          </div>
+        </article>
+        <article className="monitoring-stat-card">
+          <span className="monitoring-stat-icon green">
+            <Paperclip size={18} />
+          </span>
+          <div>
+            <p>With attachments</p>
+            <strong>{stats.attachments}</strong>
+            <small>{mailboxes.length} monitored accounts</small>
+          </div>
+        </article>
+      </section>
       <div className="admin-panel">
         <div className="admin-toolbar">
           <label className="admin-search">
@@ -158,7 +256,116 @@ export default function EmailMonitoring() {
               <option key={name}>{name}</option>
             ))}
           </select>
+          <button
+            type="button"
+            className={`monitoring-advanced-button${advancedCount ? " active" : ""}`}
+            aria-expanded={showAdvanced}
+            aria-controls="monitoring-advanced-filters"
+            onClick={() => setShowAdvanced((open) => !open)}
+          >
+            <SlidersHorizontal size={15} />
+            Advanced filters
+            {advancedCount > 0 && <span>{advancedCount}</span>}
+            {showAdvanced ? (
+              <ChevronUp size={15} />
+            ) : (
+              <ChevronDown size={15} />
+            )}
+          </button>
         </div>
+        {showAdvanced && (
+          <div
+            id="monitoring-advanced-filters"
+            className="monitoring-advanced-panel"
+          >
+            <div className="monitoring-advanced-heading">
+              <div>
+                <strong>Advanced filters</strong>
+                <p>
+                  Narrow results by message direction, read state, and
+                  attachments.
+                </p>
+              </div>
+              {advancedCount > 0 && <span>{advancedCount} active</span>}
+            </div>
+            <div className="monitoring-advanced-grid">
+              <label>
+                <span className="field-label">Message direction</span>
+                <select
+                  className="field"
+                  aria-label="Message direction"
+                  value={advancedDraft.direction}
+                  onChange={(e) =>
+                    setAdvancedDraft({
+                      ...advancedDraft,
+                      direction: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">Any direction</option>
+                  <option value="incoming">Incoming</option>
+                  <option value="outgoing">Outgoing and drafts</option>
+                </select>
+              </label>
+              <label>
+                <span className="field-label">Read state</span>
+                <select
+                  className="field"
+                  aria-label="Message read state"
+                  value={advancedDraft.readState}
+                  onChange={(e) =>
+                    setAdvancedDraft({
+                      ...advancedDraft,
+                      readState: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">Any state</option>
+                  <option value="unread">Unread</option>
+                  <option value="read">Read</option>
+                </select>
+              </label>
+              <label>
+                <span className="field-label">Attachments</span>
+                <select
+                  className="field"
+                  aria-label="Attachment state"
+                  value={advancedDraft.attachment}
+                  onChange={(e) =>
+                    setAdvancedDraft({
+                      ...advancedDraft,
+                      attachment: e.target.value,
+                    })
+                  }
+                >
+                  <option value="">With or without</option>
+                  <option value="with">Has attachments</option>
+                  <option value="without">No attachments</option>
+                </select>
+              </label>
+            </div>
+            <div className="monitoring-advanced-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetAdvanced}
+              >
+                Reset advanced
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  setAdvanced(advancedDraft);
+                  setPage(1);
+                }}
+              >
+                <Check size={15} />
+                Apply filters
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 px-5 py-3">
           <label>
             <span className="field-label">From date</span>
@@ -178,19 +385,13 @@ export default function EmailMonitoring() {
               onChange={(e) => change(setUntil, e.target.value)}
             />
           </label>
-          <button
-            className="btn-secondary"
-            onClick={() => {
-              setQuery("");
-              setMailbox("");
-              setFolder("");
-              setFrom("");
-              setUntil("");
-              setPage(1);
-            }}
-          >
+          <button className="btn-secondary" onClick={clearFilters}>
             Clear filters
           </button>
+          <span className="monitoring-result-count" aria-live="polite">
+            <Users size={14} />
+            {rows.length} results
+          </span>
         </div>
         {invalidDates && (
           <p role="alert" className="px-5 pb-3 text-red-600">
