@@ -58,6 +58,8 @@ const slice = createSlice({
             return;
           state[section] = values;
           detail = `Updated ${section} configuration`;
+        } else if (kind === "monitor") {
+          detail = `Viewed message ${payload.messageId} in ${payload.mailbox}`;
         } else if (kind === "quarantine") {
           const item = state.quarantine.find((row) => row.id === payload.id);
           if (
@@ -72,7 +74,7 @@ const slice = createSlice({
         state.audit.unshift({
           id: eventId,
           at,
-          actor: "alex.morgan@studio.co",
+          actor: payload.actor,
           action: kind,
           detail,
         });

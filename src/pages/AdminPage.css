@@ -76,8 +76,10 @@
   font-weight: 600;
 }
 .admin-content {
-  max-width: 1550px;
-  margin: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
   padding: 28px 30px 40px;
 }
 .admin-section-heading {

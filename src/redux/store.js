@@ -1,102 +1,79 @@
-import { configureStore } from "@reduxjs/toolkit";
-import mail, { defaultMail } from "./slice/mailSlice";
-import auth from "./slice/authSlice";
-import profile, { defaultProfile } from "./slice/profileSlice";
-import settings, { defaultSettings } from "./slice/settingsSlice";
-import workspace, { defaultWorkspace } from "./slice/workspaceSlice";
-import ui, { storageFailed } from "./slice/uiSlice";
+﻿import { configureStore } from "@reduxjs/toolkit";
+import { defaultMail } from "./slice/mailSlice";
+import { defaultProfile } from "./slice/profileSlice";
+import { defaultSettings } from "./slice/settingsSlice";
+import { defaultWorkspace } from "./slice/workspaceSlice";
+import { storageFailed } from "./slice/uiSlice";
 import { readStorage, writeStorage } from "../api/storage";
 import { loadMessages } from "../api/mailStorage";
-import admin from "./slice/adminSlice";
 import { defaultAdmin, validAdmin } from "../api/adminData";
+import {
+  accountKeys,
+  isMessages,
+  validMail,
+  validProfile,
+  validSettings,
+  validWorkspace,
+  validAccounts,
+  newAccount,
+} from "../api/accountState";
+import { accountId, sessionUser } from "../utils/access";
+import { rootReducer } from "./rootReducer";
 
+const admin = readStorage("admin", defaultAdmin, validAdmin);
 const validSession = (value) =>
-  value?.session?.userId === "alex-morgan" &&
-  typeof value.remember === "boolean";
-const isMessages = (value) =>
-  Array.isArray(value) &&
-  value.every(
-    (m) =>
-      typeof m.id === "string" &&
-      typeof m.subject === "string" &&
-      typeof m.sender === "string" &&
-      typeof m.body === "string" &&
-      typeof m.folder === "string" &&
-      Array.isArray(m.attachments) &&
-      Number.isFinite(Date.parse(m.date)),
-  );
-const validMail = (value) =>
-  isMessages(value.messages) &&
-  Array.isArray(value.labels) &&
-  value.labels.every((l) => typeof l.name === "string") &&
-  Array.isArray(value.customFolders) &&
-  value.customFolders.every((f) => typeof f === "string");
-const validWorkspace = (value) =>
-  ["contacts", "tasks", "notes", "events"].every(
-    (key) =>
-      Array.isArray(value[key]) &&
-      value[key].every(
-        (item) =>
-          typeof item.id === "string" &&
-          typeof (item.title ?? item.name) === "string",
-      ),
-  ) &&
-  value.contacts.every((item) => typeof item.email === "string") &&
-  value.notes.every((item) => typeof item.body === "string") &&
-  value.tasks.every((item) => typeof item.done === "boolean") &&
-  value.events.every(
-    (item) =>
-      typeof item.date === "string" &&
-      typeof item.time === "string" &&
-      typeof item.endTime === "string",
-  );
-const persistedAuth =
+  typeof value?.remember === "boolean" &&
+  Boolean(sessionUser({ auth: value, admin }));
+const auth =
   readStorage("auth", null, validSession) ||
   readStorage("auth", { session: null, remember: false }, validSession, true);
 const legacy = loadMessages();
+const owner = {
+  mail: {
+    ...readStorage(
+      "mail",
+      {
+        ...defaultMail,
+        messages: isMessages(legacy) ? legacy : defaultMail.messages,
+      },
+      validMail,
+    ),
+    undo: null,
+  },
+  profile: readStorage(
+    "profile",
+    defaultProfile,
+    (value) =>
+      validProfile(value) &&
+      value.id === defaultProfile.id &&
+      value.email === defaultProfile.email,
+  ),
+  settings: readStorage("settings", defaultSettings, validSettings),
+  workspace: readStorage("workspace", defaultWorkspace, validWorkspace),
+};
+const accounts = {
+  "alex-morgan": owner,
+  ...readStorage("accounts", {}, validAccounts),
+};
+for (const user of admin.users) {
+  const id = accountId(user);
+  if (!accounts[id]) accounts[id] = newAccount(user);
+  // Directory identity is authoritative, even when the address is edited.
+  accounts[id] = {
+    ...accounts[id],
+    profile: { ...accounts[id].profile, email: user.email, id },
+  };
+}
+const current = sessionUser({ auth, admin });
+const active = current ? accounts[accountId(current)] : owner;
 export const store = configureStore({
-  reducer: { mail, auth, profile, settings, workspace, ui, admin },
+  reducer: rootReducer,
   preloadedState: {
-    admin: readStorage("admin", defaultAdmin, validAdmin),
-    mail: {
-      ...readStorage(
-        "mail",
-        {
-          ...defaultMail,
-          messages: isMessages(legacy) ? legacy : defaultMail.messages,
-        },
-        validMail,
-      ),
-      undo: null,
-    },
-    auth: persistedAuth,
-    profile: {
-      ...defaultProfile,
-      ...readStorage(
-        "profile",
-        {},
-        (value) =>
-          Object.keys(defaultProfile).every(
-            (key) => typeof value[key] === "string",
-          ) &&
-          value.email === defaultProfile.email &&
-          value.id === defaultProfile.id,
-      ),
-    },
-    settings: {
-      ...defaultSettings,
-      ...readStorage(
-        "settings",
-        {},
-        (value) =>
-          [10, 20, 50].includes(value.pageSize) &&
-          typeof value.signature === "string" &&
-          ["compact", "markReadOnOpen", "useSignature", "confirmTrash"].every(
-            (key) => typeof value[key] === "boolean",
-          ),
-      ),
-    },
-    workspace: readStorage("workspace", defaultWorkspace, validWorkspace),
+    ...active,
+    mail: { ...active.mail, undo: null },
+    auth,
+    admin,
+    accounts,
   },
 });
 let previous = store.getState();
@@ -105,13 +82,16 @@ store.subscribe(() => {
   const before = previous;
   previous = state;
   let success = true;
-  for (const key of ["mail", "profile", "settings", "workspace", "admin"]) {
+  for (const key of ["admin", "accounts"]) {
     if (before[key] !== state[key])
-      success =
-        writeStorage(
-          key,
-          key === "mail" ? { ...state.mail, undo: null } : state[key],
-        ) && success;
+      success = writeStorage(key, state[key]) && success;
+  }
+  // Maintain original owner keys for existing installations and older versions.
+  const ownerBefore = before.accounts["alex-morgan"];
+  const ownerAfter = state.accounts["alex-morgan"];
+  for (const key of accountKeys) {
+    if (ownerBefore?.[key] !== ownerAfter?.[key])
+      success = writeStorage(key, ownerAfter[key]) && success;
   }
   if (before.auth !== state.auth) {
     success =

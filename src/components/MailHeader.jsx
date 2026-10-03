@@ -9,9 +9,12 @@ import {
   Settings,
   LogOut,
   User,
+  ShieldCheck,
+  ScanEye,
 } from "lucide-react";
 import { Avatar, IconButton } from "./Ui";
 import { initials } from "../utils/mail";
+import { canAdminister, sessionUser } from "../utils/access";
 import { signedOut } from "../redux/slice/authSlice";
 export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
   const [menu, setMenu] = useState(false);
@@ -19,6 +22,8 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const profile = useSelector((state) => state.profile);
+  const isAdmin = useSelector(canAdminister);
+  const user = useSelector(sessionUser);
   useEffect(() => {
     if (!menu) return;
     const close = (event) => {
@@ -69,6 +74,17 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
         )}
       </form>
       <div className="ml-auto flex items-center gap-2">
+        {isAdmin && (
+          <Link
+            to="/admin/overview"
+            aria-label="Admin tools"
+            title="Admin tools"
+            className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-brand-600"
+          >
+            <ShieldCheck size={18} />
+            <span className="hidden sm:inline">Admin</span>
+          </Link>
+        )}
         <IconButton
           icon={CircleHelp}
           label="Help"
@@ -104,6 +120,29 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
                   {profile.email}
                 </p>
               </div>
+              {isAdmin && (
+                <>
+                  <p className="px-3 pt-2 text-xs text-brand-600">
+                    {user.role}
+                  </p>
+                  <Link
+                    to="/admin/overview"
+                    onClick={() => setMenu(false)}
+                    className="flex items-center gap-2 rounded-lg p-3 text-sm hover:bg-slate-50"
+                  >
+                    <ShieldCheck size={16} />
+                    Admin tools
+                  </Link>
+                  <Link
+                    to="/admin/monitoring"
+                    onClick={() => setMenu(false)}
+                    className="flex items-center gap-2 rounded-lg p-3 text-sm hover:bg-slate-50"
+                  >
+                    <ScanEye size={16} />
+                    Email monitoring
+                  </Link>
+                </>
+              )}
               <Link
                 to="/profile"
                 onClick={() => setMenu(false)}

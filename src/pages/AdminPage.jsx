@@ -27,9 +27,12 @@ import { adminSections, validateRecord, deletionError } from "../api/adminData";
 import { adminChanged } from "../redux/slice/adminSlice";
 import { notify } from "../redux/slice/uiSlice";
 import "./AdminPage.css";
+import EmailMonitoring from "./EmailMonitoring";
+import { sessionUser } from "../utils/access";
 
 const navigation = [
   ["overview", "Overview", LayoutDashboard],
+  ["monitoring", "Email monitoring", Inbox],
   ["users", "Users", Users],
   ["domains", "Domains", Globe],
   ["groups", "Groups", UsersRound],
@@ -916,9 +919,11 @@ function Audit() {
             value={action}
             onChange={(e) => setAction(e.target.value)}
           >
-            {["All", "save", "delete", "settings", "quarantine"].map((item) => (
-              <option key={item}>{item}</option>
-            ))}
+            {["All", "save", "delete", "settings", "quarantine", "monitor"].map(
+              (item) => (
+                <option key={item}>{item}</option>
+              ),
+            )}
           </select>
         </div>
         <div className="admin-table-scroll">
@@ -1033,6 +1038,7 @@ function Reports() {
 export default function AdminPage() {
   const { section = "overview" } = useParams();
   const name = useSelector((s) => s.admin.organization.name);
+  const user = useSelector(sessionUser);
   const known = navigation.some(([key]) => key === section);
   return (
     <div className="admin-root">
@@ -1044,7 +1050,7 @@ export default function AdminPage() {
           <div className="admin-eyebrow">{name} / ADMINISTRATION</div>
           <h1>Admin console</h1>
         </div>
-        <span className="admin-owner">Super administrator · Demo</span>
+        <span className="admin-owner">{user?.role} ? Demo</span>
       </header>
       <div className="admin-demo-note">
         <span className="size-2 shrink-0 rounded-full bg-amber-500" />
@@ -1072,6 +1078,8 @@ export default function AdminPage() {
           </Empty>
         ) : adminSections[section] ? (
           <Directory key={section} section={section} />
+        ) : section === "monitoring" ? (
+          <EmailMonitoring />
         ) : section === "overview" ? (
           <Overview />
         ) : ["organization", "security"].includes(section) ? (

@@ -15,10 +15,16 @@ import WorkspacePage from "./pages/WorkspacePage";
 import AppLayout from "./components/AppLayout";
 import Notifications from "./components/Notifications";
 import AdminPage from "./pages/AdminPage";
+import { canAdminister, sessionUser } from "./utils/access";
 
 function ProtectedRoute() {
-  const session = useSelector((state) => state.auth.session);
+  const session = useSelector(sessionUser);
   return session ? <Outlet /> : <Navigate to="/login" replace />;
+}
+
+function AdminRoute() {
+  const allowed = useSelector(canAdminister);
+  return allowed ? <Outlet /> : <Navigate to="/mail/Inbox" replace />;
 }
 
 export default function App() {
@@ -31,11 +37,13 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<Navigate to="/mail/Inbox" replace />} />
               <Route path="mail/:folder" element={<MailPage />} />
-              <Route
-                path="admin"
-                element={<Navigate to="/admin/overview" replace />}
-              />
-              <Route path="admin/:section" element={<AdminPage />} />
+              <Route element={<AdminRoute />}>
+                <Route
+                  path="admin"
+                  element={<Navigate to="/admin/overview" replace />}
+                />
+                <Route path="admin/:section" element={<AdminPage />} />
+              </Route>
               <Route path="profile" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsPage />} />
               {["contacts", "tasks", "notes", "calendar"].map((page) => (

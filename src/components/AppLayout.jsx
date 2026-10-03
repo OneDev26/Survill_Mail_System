@@ -23,7 +23,9 @@ export default function AppLayout() {
   const { compose, storageError } = useSelector((state) => state.ui);
   const title = location.pathname.startsWith("/mail")
     ? "Mail"
-    : location.pathname.slice(1);
+    : location.pathname.startsWith("/admin")
+      ? "Administration"
+      : location.pathname.slice(1);
   function search(value) {
     if (!location.pathname.startsWith("/mail/")) {
       navigate(`/mail/Inbox?q=${encodeURIComponent(value)}`);
@@ -86,7 +88,7 @@ export default function AppLayout() {
                 notify({
                   text:
                     message.folder === "Sent"
-                      ? "Message sent to your demo Sent folder."
+                      ? "Message saved to Sent and delivered to matching local demo mailboxes."
                       : "Draft saved.",
                 }),
               );

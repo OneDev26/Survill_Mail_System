@@ -17,6 +17,7 @@ export default function LoginPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const session = useSelector((state) => state.auth.session);
+  const users = useSelector((state) => state.admin.users);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
@@ -31,7 +32,7 @@ export default function LoginPage() {
     setBusy(true);
     setError("");
     try {
-      const result = await authService.login({ email, password });
+      const result = await authService.login({ email, password, users });
       dispatch(signedIn({ session: result, remember }));
       navigate("/mail/Inbox", { replace: true });
     } catch (err) {
@@ -176,7 +177,7 @@ export default function LoginPage() {
           </form>
           <div className="mt-7 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
             <p className="text-xs font-semibold text-brand-600">
-              Try the demo account
+              Try the admin demo account
             </p>
             <p className="mt-2 text-xs text-slate-600">
               {DEMO_CREDENTIALS.email}
@@ -197,6 +198,27 @@ export default function LoginPage() {
               Fill demo credentials →
             </button>
           </div>
+          <div className="mt-3 rounded-xl border border-slate-200 p-4 text-xs text-slate-600">
+            <p>Member account: sophia@studio.co</p>
+            <p className="mt-1">Password: {DEMO_CREDENTIALS.password}</p>
+            <button
+              type="button"
+              disabled={busy}
+              className="mt-3 font-semibold text-brand-600"
+              onClick={() => {
+                setEmail("sophia@studio.co");
+                setPassword(DEMO_CREDENTIALS.password);
+                setError("");
+              }}
+            >
+              Fill member credentials
+            </button>
+            <p className="mt-3 leading-5">
+              All active directory users share this demo password. Access
+              follows the role assigned by an administrator. Organization
+              administrators can review locally stored mail.
+            </p>
+          </div>
           <p className="mt-6 flex items-start gap-2 text-[11px] leading-5 text-slate-400">
             <ShieldCheck size={16} className="mt-0.5 shrink-0" />
             Local demo only. No real account is authenticated and no email is
@@ -208,8 +230,9 @@ export default function LoginPage() {
         <Dialog title="Demo account access" onClose={() => setHelp(false)}>
           <div className="space-y-4 p-6 text-sm leading-6 text-slate-600">
             <p>
-              This demo uses a shared sample account. Password recovery will be
-              available when you connect your authentication API.
+              This demo uses directory accounts with a shared sample password.
+              Password recovery will be available when you connect your
+              authentication API.
             </p>
             <p>
               Use <strong>{DEMO_CREDENTIALS.email}</strong> with password{" "}

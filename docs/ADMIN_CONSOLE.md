@@ -1,6 +1,6 @@
 # Admin console
 
-Open **Admin console** in the workspace sidebar, or visit `/admin`. Sign in with the existing demo account. `/admin` redirects to `/admin/overview`; direct section URLs are protected by the existing session route.
+Sign in as an active Administrator or Super administrator, then open **Admin** in the top bar or **Admin tools** in the account menu. The mail sidebar contains only normal workspace actions. `/admin` redirects to `/admin/overview`; direct admin URLs check the current directory role. Members are redirected to their inbox. Admins retain compose, inbox, contacts, tasks, notes, calendar, profile, and settings.
 
 ## Available workflows
 
@@ -17,11 +17,11 @@ Open **Admin console** in the workspace sidebar, or visit `/admin`. Sign in with
 - Audit: latest 1,000 mutations, actor/action search/filter, CSV download.
 - Organization: identity, admin contact, validated IANA time zone metadata. Displayed timestamps use the browser time zone.
 
-State lives in the Redux admin slice and persists under `zoho-demo-v2:admin`. Storage failures use the existing persistent warning. The existing mailbox and personal settings remain separate. The fixed demo account is the protected super administrator; directory accounts cannot sign in. Roles are directory metadata, not a production authorization system. CSV values are quoted and formula-leading values are prefixed to avoid spreadsheet formula execution.
+State lives in the Redux admin slice and persists under `zoho-demo-v2:admin`. Storage failures use the existing persistent warning. The existing mailbox and personal settings remain separate. Alex is the protected super administrator. All active directory users can sign in using their directory email and the shared demo password `Demo@1234`. Sophia starts as a Member; James starts as an Administrator. Roles gate header/account-menu controls, routes, and admin Redux mutations. Suspended or deleted accounts cannot sign in. This is client-side demo behavior, not a production authorization boundary. CSV values are quoted and formula-leading values are prefixed to avoid spreadsheet formula execution.
 
 ## Production architecture and remaining work
 
-This repository is a frontend demo. No provider credentials, mail server, database, job queue, DNS resolver, or authenticated administration API is configured. All policies and quotas here are planned configuration and have no effect on real accounts, mailbox access, mail transport, authentication, password strength, sessions, or retention. Browser state and its audit history are not trusted security boundaries.
+This repository is a frontend demo. No provider credentials, mail server, database, job queue, DNS resolver, or authenticated administration API is configured. Role and active-status checks apply within the demo. Security policies and quotas are planned configuration and have no effect on real accounts, mail transport, password strength, sessions, or retention. Browser state and its audit history are not trusted security boundaries.
 
 Before production, connect these modules to an authenticated API and a durable organization-scoped database. Enforce membership, permissions, ownership, validation, and audit logging server-side on every request. Keep provider secrets in a server-side secret store. Integrate your actual mail provider using its documented, region-specific APIs and OAuth scopes; do not infer endpoints from UI route names.
 
@@ -33,4 +33,14 @@ Additional production modules include SSO/directory sync, MFA enrollment/recover
 
 ## Validation
 
-`npm run build`, `npm run lint`, and `npm test` cover the application. `tests/admin.spec.mjs` exercises persistence, owner/dependency protection, validation, directory workflows, policy configuration, confirmed quarantine actions, export, and mobile layout alongside the existing mailbox tests.
+`npm run build`, `npm run lint`, and `npm test` cover the application. `tests/monitoring.spec.mjs` exercises role gating, mailbox isolation, local delivery with Bcc protection, read-only monitoring, attachments, read-access auditing, and suspension. `tests/admin.spec.mjs` exercises persistence, owner/dependency protection, validation, directory workflows, policy configuration, confirmed quarantine actions, export, and mobile layout alongside the existing mailbox tests.
+
+## Email monitoring and separate mailboxes
+
+The account menu and admin navigation expose **Email monitoring** only to administrators. It searches sender, recipients (including Bcc on sender copies), subject, body, and mailbox owner. Mailbox, folder, and inclusive local-date filters combine with search. Review shows the full plain-text body, recipient details, timestamp, and downloadable attachments. Opening a message records the actual signed-in actor, message ID, and mailbox in the audit log without changing unread state or moving the original.
+
+Monitoring covers the currently stored contents of every local account: Inbox, Sent, Drafts, Archive, Spam, Trash, and custom folders. A delivered message appears separately in sender and recipient mailboxes. Permanently deleted messages are not retained; this is not a transport journal, legal archive, or tamper-proof audit. Mail outside this browser is unavailable. Mailboxes retained after directory deletion remain visible to admins as stored data.
+
+Account snapshots live under `zoho-demo-v2:accounts`. The original owner data is imported and its old keys maintained for compatibility. Login switches mail, profile, personal settings, and workspace state together; logout closes compose and clears the active mailbox. Local sends generate Inbox copies for matching active directory users, including To/Cc/Bcc recipients. Recipient copies omit Bcc and start unread; aliases, groups, routing, and external delivery still need provider integration. Drafts do not deliver. The app's login screen discloses administrator monitoring.
+
+All accounts and message content live in browser storage, which is not a trusted security boundary. Production requires server-side role checks on message list, read, attachment, and administrative mutation endpoints; account-isolated storage; server-side delivery journaling for complete monitoring; and durable read-access audit events. Concurrent tabs/devices and live server mail require synchronization beyond these local snapshots.

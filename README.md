@@ -1,6 +1,6 @@
 # Zoho Mail inspired workspace
 
-Responsive React, Tailwind CSS v4, Redux Toolkit, and React Router app with a local demo account and seeded data. No real email is sent.
+Responsive React, Tailwind CSS v4, Redux Toolkit, and React Router app with role-aware local demo accounts and seeded data. Delivery between directory users is simulated in this browser; no real email is sent.
 
 ## Start
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Login: **alex.morgan@studio.co** / **Demo@1234**. The login page also has a Fill demo credentials button.
+Admin login: **alex.morgan@studio.co** / **Demo@1234**. Member login: **sophia@studio.co** / **Demo@1234**. All active directory accounts use this shared demo password; their directory role determines admin access. The login page also has a Fill demo credentials button.
 
 ```sh
 npm run build
@@ -51,10 +51,15 @@ See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md). Domain state is separate
 
 ## Demo boundaries
 
-One fixed account is supported. Login is client-side simulation; password-recovery help does not send email. Local data remains after logout so the same account can resume. Attachments are limited to 1 MB per message; avatars to 200 KB. Calendar events are local, same-day events without recurrence or invitations. Delivery, synchronization, real security, and multiple accounts require a backend.
+Active directory accounts have separate local mailboxes, profiles, settings, and workspace data. Login is client-side simulation; password-recovery help does not send email. Local data remains after logout so the same account can resume. Attachments are limited to 1 MB per message; avatars to 200 KB. Calendar events are local, same-day events without recurrence or invitations. Real delivery, multi-device synchronization, and production authentication/authorization require a backend.
 
 Storage uses `zoho-demo-v2:` keys and imports valid older mailbox data. Storage failure displays a persistent warning and the app continues in memory. Clear this site's browser storage to reset demo data. Serve index.html for unknown application paths in production so direct routes like /profile work.
 
 ## Admin console
 
-Open **Admin console** in the sidebar for organization management. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, demo quarantine, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. All administration is local demo state; policies are not enforced by a server.
+Administrators see **Admin** in the top bar and **Admin tools** / **Email monitoring** in the account menu. There is no admin entry in the sidebar. Members cannot open admin routes. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, demo quarantine, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. Email monitoring reads all currently stored local mailbox copies, including drafts, with search, mailbox/folder/date filters and audited read-only review. All administration is local demo state; policies are not enforced by a server.
+
+
+Admin: alex.morgan@studio.co
+Member: sophia@studio.co
+Password: Demo@1234
