@@ -37,6 +37,14 @@ export function rootReducer(state, action) {
     state = {
       ...state,
       ...account,
+      admin: {
+        ...state.admin,
+        users: state.admin.users.map((item) =>
+          item.id === user.id
+            ? { ...item, lastLogin: action.payload.session.signedInAt }
+            : item,
+        ),
+      },
       profile: { ...account.profile, id, email: user.email },
       ui: {
         compose: null,

@@ -81,6 +81,7 @@ export const defaultAdmin = {
       department: "Operations",
       quota: 50,
       status: "Active",
+      lastLogin: "2026-10-03T03:45:00.000Z",
     },
     {
       id: "sophia",
@@ -90,6 +91,7 @@ export const defaultAdmin = {
       department: "Design",
       quota: 25,
       status: "Active",
+      lastLogin: "2026-10-02T11:18:00.000Z",
     },
     {
       id: "james",
@@ -99,10 +101,18 @@ export const defaultAdmin = {
       department: "Engineering",
       quota: 25,
       status: "Active",
+      lastLogin: "2026-10-01T07:32:00.000Z",
     },
   ],
   domains: [
-    { id: "studio", name: "studio.co", status: "Pending verification" },
+    {
+      id: "studio",
+      name: "studio.co",
+      status: "Pending verification",
+      primary: true,
+      createdAt: "2026-09-01T04:30:00.000Z",
+      dkimVersion: 1,
+    },
   ],
   groups: [
     {
@@ -111,6 +121,8 @@ export const defaultAdmin = {
       email: "team@studio.co",
       members: "alex.morgan@studio.co, sophia@studio.co",
       access: "Organization only",
+      status: "Active",
+      createdAt: "2026-09-01T05:00:00.000Z",
     },
   ],
   aliases: [],

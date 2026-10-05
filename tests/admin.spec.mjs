@@ -60,6 +60,56 @@ test("admin directory persists, protects owner, and records changes", async ({
     page.getByRole("cell", { name: "Deleted 1 users record(s)", exact: true }),
   ).toBeVisible();
 });
+test("user profiles and access actions persist and are audited", async ({
+  page,
+}) => {
+  await login(page);
+  await expect(
+    page.getByRole("columnheader", { name: "Last login", exact: true }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("button", { name: "View Sophia Chen profile", exact: true })
+    .click();
+  let dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("sophia@studio.co", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Last login", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+
+  await page
+    .getByRole("button", { name: "Manage Sophia Chen access", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Status for Sophia Chen").selectOption("Suspended");
+  await dialog.getByRole("button", { name: "Save status" }).click();
+  await expect(dialog.getByRole("button", { name: "Save status" })).toBeDisabled();
+
+  await dialog.getByRole("button", { name: "Reset password" }).click();
+  await expect(dialog.getByText("Temporary password:")).toContainText(
+    "Demo@1234",
+  );
+  await dialog.getByRole("button", { name: "Force logout" }).click();
+  await expect(
+    dialog.getByText("Logout request recorded successfully."),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+
+  await expect(
+    page.getByRole("row").filter({ hasText: "Sophia Chen" }),
+  ).toContainText("Suspended");
+  await page.reload();
+  await expect(
+    page.getByRole("row").filter({ hasText: "Sophia Chen" }),
+  ).toContainText("Suspended");
+
+  await page.goto("/admin/audit");
+  await expect(
+    page.getByRole("row").filter({ hasText: "Reset demo password" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("row").filter({ hasText: "Forced demo logout" }),
+  ).toHaveCount(1);
+});
 test("validation rejects duplicates and unknown domains; dependencies protect users", async ({
   page,
 }) => {
@@ -97,7 +147,99 @@ test("domains, groups, aliases, and rules can be configured", async ({
   await expect(
     page.getByRole("row").filter({ hasText: "example.org" }),
   ).toContainText("Pending verification");
+  await expect(
+    page.getByRole("region", { name: "Domain overview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Manage DNS for example.org", exact: true })
+    .click();
+  const domainDialog = page.getByRole("dialog");
+  await domainDialog
+    .getByRole("button", { name: "Run verification", exact: true })
+    .click();
+  await expect(
+    domainDialog.getByRole("button", {
+      name: "Verification complete",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await domainDialog
+    .getByRole("button", { name: "Set as primary", exact: true })
+    .click();
+  await expect(
+    domainDialog.getByRole("button", { name: "Primary domain", exact: true }),
+  ).toBeDisabled();
+  await domainDialog
+    .getByRole("button", { name: "Copy SPF value", exact: true })
+    .click();
+  await expect(
+    domainDialog.getByRole("button", { name: "Copy SPF value", exact: true }),
+  ).toContainText("Copied");
+  await domainDialog
+    .getByRole("button", { name: "Rotate DKIM key", exact: true })
+    .click();
+  await expect(domainDialog.getByRole("button", { name: "Key rotated" })).toBeVisible();
+  await domainDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "example.org" }),
+  ).toContainText("Verified");
+  await expect(
+    page.getByRole("row").filter({ hasText: "example.org" }),
+  ).toContainText("Primary domain");
+  await page.reload();
+  await expect(
+    page.getByRole("row").filter({ hasText: "example.org" }),
+  ).toContainText("Verified");
   await page.goto("/admin/groups");
+  await expect(
+    page.getByRole("region", { name: "Group overview" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "View Studio team group", exact: true })
+    .click();
+  let groupDialog = page.getByRole("dialog");
+  await expect(groupDialog.getByText("Group members", { exact: true })).toBeVisible();
+  await expect(groupDialog.getByText("Sophia Chen", { exact: true })).toBeVisible();
+  await groupDialog.getByRole("button", { name: "Close", exact: true }).click();
+
+  await page
+    .getByRole("button", { name: "Manage Studio team group", exact: true })
+    .click();
+  groupDialog = page.getByRole("dialog");
+  await groupDialog.getByLabel("Include Sophia Chen").uncheck();
+  await groupDialog
+    .getByLabel("Group sender permission")
+    .selectOption("Members only");
+  await groupDialog.getByLabel("Group delivery status").selectOption("Paused");
+  await groupDialog
+    .getByRole("button", { name: "Copy address", exact: true })
+    .click();
+  await expect(
+    groupDialog.getByRole("button", { name: "Address copied", exact: true }),
+  ).toBeVisible();
+  await groupDialog
+    .getByRole("button", { name: "Run delivery test", exact: true })
+    .click();
+  await expect(
+    groupDialog.getByRole("button", { name: "Test recorded", exact: true }),
+  ).toBeVisible();
+  await groupDialog
+    .getByRole("button", { name: "Save group settings", exact: true })
+    .click();
+  await expect(
+    groupDialog.getByText("Group settings saved successfully.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await groupDialog.getByRole("button", { name: "Close", exact: true }).click();
+
+  let studioRow = page.getByRole("row").filter({ hasText: "Studio team" });
+  await expect(studioRow).toContainText("Members only");
+  await expect(studioRow).toContainText("Paused");
+  await expect(studioRow.getByRole("cell").nth(4)).toHaveText("1");
+  await page.reload();
+  studioRow = page.getByRole("row").filter({ hasText: "Studio team" });
+  await expect(studioRow).toContainText("Paused");
   await page.getByRole("button", { name: "Add group", exact: true }).click();
   await page.getByLabel("Group name").fill("Engineering");
   await page.getByLabel("Group email").fill("engineering@studio.co");
