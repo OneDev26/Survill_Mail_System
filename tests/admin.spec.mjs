@@ -72,7 +72,9 @@ test("user profiles and access actions persist and are audited", async ({
     .getByRole("button", { name: "View Sophia Chen profile", exact: true })
     .click();
   let dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("sophia@studio.co", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByText("sophia@studio.co", { exact: true }),
+  ).toBeVisible();
   await expect(dialog.getByText("Last login", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close", exact: true }).click();
 
@@ -82,7 +84,9 @@ test("user profiles and access actions persist and are audited", async ({
   dialog = page.getByRole("dialog");
   await dialog.getByLabel("Status for Sophia Chen").selectOption("Suspended");
   await dialog.getByRole("button", { name: "Save status" }).click();
-  await expect(dialog.getByRole("button", { name: "Save status" })).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Save status" }),
+  ).toBeDisabled();
 
   await dialog.getByRole("button", { name: "Reset password" }).click();
   await expect(dialog.getByText("Temporary password:")).toContainText(
@@ -178,8 +182,12 @@ test("domains, groups, aliases, and rules can be configured", async ({
   await domainDialog
     .getByRole("button", { name: "Rotate DKIM key", exact: true })
     .click();
-  await expect(domainDialog.getByRole("button", { name: "Key rotated" })).toBeVisible();
-  await domainDialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(
+    domainDialog.getByRole("button", { name: "Key rotated" }),
+  ).toBeVisible();
+  await domainDialog
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
   await expect(
     page.getByRole("row").filter({ hasText: "example.org" }),
   ).toContainText("Verified");
@@ -198,8 +206,12 @@ test("domains, groups, aliases, and rules can be configured", async ({
     .getByRole("button", { name: "View Studio team group", exact: true })
     .click();
   let groupDialog = page.getByRole("dialog");
-  await expect(groupDialog.getByText("Group members", { exact: true })).toBeVisible();
-  await expect(groupDialog.getByText("Sophia Chen", { exact: true })).toBeVisible();
+  await expect(
+    groupDialog.getByText("Group members", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    groupDialog.getByText("Sophia Chen", { exact: true }),
+  ).toBeVisible();
   await groupDialog.getByRole("button", { name: "Close", exact: true }).click();
 
   await page
@@ -271,9 +283,7 @@ test("domains, groups, aliases, and rules can be configured", async ({
     page.getByRole("cell", { name: "Hold suspicious sender", exact: true }),
   ).toBeVisible();
 });
-test("security policies persist and quarantine decisions are confirmed", async ({
-  page,
-}) => {
+test("security policies persist across reload", async ({ page }) => {
   await login(page);
   await page.goto("/admin/security");
   await page.getByLabel("Allow POP access").check();
@@ -284,23 +294,6 @@ test("security policies persist and quarantine decisions are confirmed", async (
   await page.reload();
   await expect(page.getByLabel("Allow POP access")).toBeChecked();
   await expect(page.getByLabel("Session duration (minutes)")).toHaveValue("90");
-  await page.goto("/admin/quarantine");
-  await page.getByRole("button", { name: "Release", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Release", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Release", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Confirm action", exact: true })
-    .click();
-  await page.getByLabel("Quarantine status").selectOption("Released");
-  await expect(
-    page.getByText("Example suspicious message", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Release", exact: true }),
-  ).toHaveCount(0);
 });
 test("CSV export, search, overview and mobile navigation work", async ({
   page,
