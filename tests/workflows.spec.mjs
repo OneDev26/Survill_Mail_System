@@ -139,6 +139,209 @@ test("compose, autosave, Cc/Bcc, attachments, send and reply all", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
+test("outbox is available below drafts and supports mailbox actions", async ({
+  page,
+}) => {
+  await login(page);
+  const folders = page.getByRole("navigation", { name: "Mail folders" });
+  const links = folders.getByRole("link");
+  await expect(links.filter({ hasText: "Drafts" })).toHaveCount(1);
+  await expect(links.filter({ hasText: "Outbox" })).toHaveCount(1);
+  await expect(links.filter({ hasText: "Sent" })).toHaveCount(1);
+  await expect(links).toHaveText([
+    /Inbox/,
+    /Starred/,
+    /Drafts/,
+    /Outbox/,
+    /Snooze/,
+    /Sent/,
+    /Archive/,
+    /Spam/,
+    /Trash/,
+    /Template/,
+    /Notifications/,
+    /Newsletter/,
+  ]);
+  await folders.getByRole("link", { name: /^Outbox/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Outbox", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Me.*Q3 campaign follow-up/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Q3 campaign follow-up" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Star message" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unstar message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Move message to trash" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No messages here" }),
+  ).toBeVisible();
+});
+
+test("snooze is available below outbox and supports mailbox actions", async ({
+  page,
+}) => {
+  await login(page);
+  const folders = page.getByRole("navigation", { name: "Mail folders" });
+  const links = folders.getByRole("link");
+  await expect(links).toHaveText([
+    /Inbox/,
+    /Starred/,
+    /Drafts/,
+    /Outbox/,
+    /Snooze/,
+    /Sent/,
+    /Archive/,
+    /Spam/,
+    /Trash/,
+    /Template/,
+    /Notifications/,
+    /Newsletter/,
+  ]);
+  await folders.getByRole("link", { name: /^Snooze/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Snooze", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Sophia Chen.*Website redesign feedback/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Website redesign feedback reminder" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Star message" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unstar message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Move message to inbox" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No messages here" }),
+  ).toBeVisible();
+});
+
+test("newsletter is available after notifications and supports mailbox actions", async ({
+  page,
+}) => {
+  await login(page);
+  const folders = page.getByRole("navigation", { name: "Mail folders" });
+  const links = folders.getByRole("link");
+  await expect(links).toHaveText([
+    /Inbox/,
+    /Starred/,
+    /Drafts/,
+    /Outbox/,
+    /Snooze/,
+    /Sent/,
+    /Archive/,
+    /Spam/,
+    /Trash/,
+    /Template/,
+    /Notifications/,
+    /Newsletter/,
+  ]);
+  await folders.getByRole("link", { name: /^Newsletter/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Newsletter", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Notion.*The Studio Weekly/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "The Studio Weekly — October edition" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Star message" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unstar message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Archive message" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No messages here" }),
+  ).toBeVisible();
+});
+
+test("notifications is available after template and supports mailbox actions", async ({
+  page,
+}) => {
+  await login(page);
+  const folders = page.getByRole("navigation", { name: "Mail folders" });
+  const links = folders.getByRole("link");
+  await expect(links).toHaveText([
+    /Inbox/,
+    /Starred/,
+    /Drafts/,
+    /Outbox/,
+    /Snooze/,
+    /Sent/,
+    /Archive/,
+    /Spam/,
+    /Trash/,
+    /Template/,
+    /Notifications/,
+    /Newsletter/,
+  ]);
+  await folders.getByRole("link", { name: /^Notifications/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Notifications", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /GitHub.*New activity in studio\/website/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "New activity in studio/website" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Star message" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unstar message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Move message to inbox" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No messages here" }),
+  ).toBeVisible();
+});
+
+test("template is available below trash and supports mailbox actions", async ({
+  page,
+}) => {
+  await login(page);
+  const folders = page.getByRole("navigation", { name: "Mail folders" });
+  const links = folders.getByRole("link");
+  await expect(links).toHaveText([
+    /Inbox/,
+    /Starred/,
+    /Drafts/,
+    /Outbox/,
+    /Snooze/,
+    /Sent/,
+    /Archive/,
+    /Spam/,
+    /Trash/,
+    /Template/,
+    /Notifications/,
+    /Newsletter/,
+  ]);
+  await folders.getByRole("link", { name: /^Template/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Template", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Me.*Project status update/ })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Project status update" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Star message" }).click();
+  await expect(
+    page.getByRole("button", { name: "Unstar message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Archive message" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No messages here" }),
+  ).toBeVisible();
+});
+
 test("profile changes and preferences persist across navigation and reload", async ({
   page,
 }) => {

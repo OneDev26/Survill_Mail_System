@@ -2,10 +2,15 @@ export const systemFolders = [
   "Inbox",
   "Starred",
   "Drafts",
+  "Outbox",
+  "Snooze",
   "Sent",
   "Archive",
   "Spam",
   "Trash",
+  "Template",
+  "Notifications",
+  "Newsletter",
 ];
 export function initials(name = "") {
   return (
