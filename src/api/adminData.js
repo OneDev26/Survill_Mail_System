@@ -72,6 +72,7 @@ export const adminSections = {
   },
 };
 export const defaultAdmin = {
+  stores: [],
   users: [
     {
       id: "owner",

@@ -19,8 +19,14 @@ import {
 } from "../api/accountState";
 import { accountId, sessionUser } from "../utils/access";
 import { rootReducer } from "./rootReducer";
+import { validStores } from "../api/storeData";
 
 const admin = readStorage("admin", defaultAdmin, validAdmin);
+// Older installations have no store collection; preserve their other admin data.
+const hydratedAdmin = {
+  ...admin,
+  stores: validStores(admin.stores) ? admin.stores : [],
+};
 const validSession = (value) =>
   typeof value?.remember === "boolean" &&
   Boolean(sessionUser({ auth: value, admin }));
@@ -72,7 +78,7 @@ export const store = configureStore({
     ...active,
     mail: { ...active.mail, undo: null },
     auth,
-    admin,
+    admin: hydratedAdmin,
     accounts,
   },
 });

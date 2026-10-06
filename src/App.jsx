@@ -39,6 +39,10 @@ export default function App() {
               <Route path="mail/:folder" element={<MailPage />} />
               <Route element={<AdminRoute />}>
                 <Route
+                  path="admin/quarantine"
+                  element={<Navigate to="/admin/stores" replace />}
+                />
+                <Route
                   path="admin"
                   element={<Navigate to="/admin/overview" replace />}
                 />

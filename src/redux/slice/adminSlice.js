@@ -1,5 +1,12 @@
 import { createSlice } from "@reduxjs/toolkit";
 import {
+  cleanStore,
+  storeError,
+  cleanEmployee,
+  employeeError,
+  employeeBatchError,
+} from "../../api/storeData";
+import {
   defaultAdmin,
   validateRecord,
   deletionError,
@@ -21,7 +28,60 @@ const slice = createSlice({
       reducer(state, { payload }) {
         const { kind, section, record, ids, values, eventId, at } = payload;
         let detail;
-        if (kind === "save") {
+        if (kind === "storeSave") {
+          const next = cleanStore(record);
+          if (storeError(state.stores, next)) return;
+          const existing = state.stores.find((item) => item.id === next.id);
+          if (existing) Object.assign(existing, next, { updatedAt: at });
+          else
+            state.stores.push({
+              ...next,
+              employees: [],
+              createdAt: at,
+              updatedAt: at,
+            });
+          detail = `${existing ? "Updated" : "Created"} store: ${next.name} (${next.code})`;
+        } else if (kind === "storeDelete") {
+          const store = state.stores.find(
+            (item) => item.id === payload.storeId,
+          );
+          if (!store || store.employees.length) return;
+          state.stores = state.stores.filter((item) => item.id !== store.id);
+          detail = `Deleted store: ${store.name} (${store.code})`;
+        } else if (
+          ["employeeSave", "employeeBulk", "employeeRemove"].includes(kind)
+        ) {
+          const store = state.stores.find(
+            (item) => item.id === payload.storeId,
+          );
+          if (!store) return;
+          if (kind === "employeeSave") {
+            const employee = cleanEmployee(record);
+            if (employeeError(store, employee)) return;
+            const index = store.employees.findIndex(
+              (item) => item.id === employee.id,
+            );
+            if (index < 0) store.employees.push(employee);
+            else store.employees[index] = employee;
+            detail = `${index < 0 ? "Added" : "Updated"} employee ${employee.email} in store ${store.code}`;
+          } else if (kind === "employeeBulk") {
+            if (!Array.isArray(payload.employees)) return;
+            const employees = payload.employees.map(cleanEmployee);
+            if (employeeBatchError(store, employees)) return;
+            store.employees.push(...employees);
+            detail = `Added ${employees.length} employees to store ${store.code}`;
+          } else {
+            const employee = store.employees.find(
+              (item) => item.id === payload.employeeId,
+            );
+            if (!employee) return;
+            store.employees = store.employees.filter(
+              (item) => item.id !== employee.id,
+            );
+            detail = `Removed employee ${employee.email} from store ${store.code}`;
+          }
+          store.updatedAt = at;
+        } else if (kind === "save") {
           if (validateRecord(state, section, record)) return;
           const index = state[section].findIndex(
             (item) => item.id === record.id,
@@ -64,7 +124,8 @@ const slice = createSlice({
             domain.verifiedAt = at;
             detail = `Verified domain: ${domain.name}`;
           } else if (kind === "domainPrimary") {
-            for (const item of state.domains) item.primary = item.id === domain.id;
+            for (const item of state.domains)
+              item.primary = item.id === domain.id;
             detail = `Set primary domain: ${domain.name}`;
           } else {
             domain.dkimVersion = (domain.dkimVersion || 1) + 1;
@@ -102,16 +163,6 @@ const slice = createSlice({
           detail = `Updated ${section} configuration`;
         } else if (kind === "monitor") {
           detail = `Viewed message ${payload.messageId} in ${payload.mailbox}`;
-        } else if (kind === "quarantine") {
-          const item = state.quarantine.find((row) => row.id === payload.id);
-          if (
-            !item ||
-            item.status !== "Held" ||
-            !["Released", "Deleted"].includes(payload.status)
-          )
-            return;
-          item.status = payload.status;
-          detail = `${payload.status} demo quarantine message: ${item.subject}`;
         } else return;
         state.audit.unshift({
           id: eventId,

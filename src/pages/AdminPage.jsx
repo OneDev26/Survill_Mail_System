@@ -28,6 +28,7 @@ import {
   Copy,
   RefreshCw,
   Star,
+  Store,
 } from "lucide-react";
 import Dialog from "../components/Dialog";
 import { adminSections, validateRecord, deletionError } from "../api/adminData";
@@ -36,6 +37,7 @@ import { signedOut } from "../redux/slice/authSlice";
 import { notify } from "../redux/slice/uiSlice";
 import "./AdminPage.css";
 import EmailMonitoring from "./EmailMonitoring";
+import StoresPage from "./StoresPage";
 import { sessionUser } from "../utils/access";
 
 const navigation = [
@@ -48,7 +50,7 @@ const navigation = [
   ["routing", "Mail routing", Route],
   ["blocked", "Sender controls", ShieldBan],
   ["security", "Security & retention", LockKeyhole],
-  ["quarantine", "Quarantine", Inbox],
+  ["stores", "Stores", Store],
   ["reports", "Reports", ChartNoAxesCombined],
   ["audit", "Audit log", ScrollText],
   ["organization", "Organization", Building2],
@@ -434,7 +436,9 @@ function domainDnsRecords(domain) {
   ];
 }
 function DomainOverview({ domains }) {
-  const verified = domains.filter((domain) => domain.status === "Verified").length;
+  const verified = domains.filter(
+    (domain) => domain.status === "Verified",
+  ).length;
   const pending = domains.length - verified;
   const primary = domains.find((domain) => domain.primary);
   return (
@@ -521,7 +525,9 @@ function DomainManager({ domain, onClose }) {
             <div className="admin-domain-title">
               <h3>{domain.name}</h3>
               <Badge>{verified ? "Verified" : "Pending verification"}</Badge>
-              {isPrimary && <span className="admin-domain-primary">Primary</span>}
+              {isPrimary && (
+                <span className="admin-domain-primary">Primary</span>
+              )}
             </div>
             <p>
               Review demo DNS records and manage organization domain settings.
@@ -615,9 +621,7 @@ function groupMemberEmails(group) {
 function GroupOverview({ groups }) {
   const memberEmails = new Set(groups.flatMap(groupMemberEmails));
   const active = groups.filter((group) => group.status !== "Paused").length;
-  const restricted = groups.filter(
-    (group) => group.access !== "Anyone",
-  ).length;
+  const restricted = groups.filter((group) => group.access !== "Anyone").length;
   return (
     <section className="admin-group-stats" aria-label="Group overview">
       <article>
@@ -782,7 +786,9 @@ function GroupManager({ group, users, onClose }) {
         <header className="admin-group-manager-header">
           <div>
             <h3>{group.email}</h3>
-            <p>Manage local membership, sender permissions, and delivery state.</p>
+            <p>
+              Manage local membership, sender permissions, and delivery state.
+            </p>
           </div>
           <button className="btn-secondary" onClick={copyAddress}>
             <Copy size={14} />
@@ -1025,7 +1031,10 @@ function Directory({ section }) {
                 {section === "domains" && <th>Status</th>}
                 {section === "users" && <th>Last login</th>}
                 {section === "groups" && (
-                  <><th>Members</th><th>Delivery</th></>
+                  <>
+                    <th>Members</th>
+                    <th>Delivery</th>
+                  </>
                 )}
                 <th>Actions</th>
               </tr>
@@ -1259,9 +1268,7 @@ function Directory({ section }) {
           </div>
         </Dialog>
       )}
-      {dns && (
-        <DomainManager domain={dns} onClose={() => setDns(null)} />
-      )}
+      {dns && <DomainManager domain={dns} onClose={() => setDns(null)} />}
     </>
   );
 }
@@ -1295,10 +1302,10 @@ function Overview() {
           ["Domains", state.domains.length, "DNS verification pending", Globe],
           ["Local messages", messages.length, "Current demo mailbox", Inbox],
           [
-            "Held messages",
-            state.quarantine.filter((q) => q.status === "Held").length,
-            "Demo quarantine",
-            ShieldBan,
+            "Stores",
+            state.stores.length,
+            `${state.stores.reduce((sum, store) => sum + store.employees.length, 0)} employee memberships`,
+            Store,
           ],
         ].map(([label, value, caption, Icon]) => (
           <div className="admin-stat" key={label}>
@@ -1545,98 +1552,6 @@ function Settings({ section }) {
     </>
   );
 }
-function Quarantine() {
-  const rows = useSelector((s) => s.admin.quarantine);
-  const dispatch = useDispatch();
-  const [action, setAction] = useState(null);
-  const [status, setStatus] = useState("Held");
-  const visible = rows.filter(
-    (row) => status === "All" || row.status === status,
-  );
-  return (
-    <>
-      <div className="admin-section-heading">
-        <div>
-          <h2>Quarantine</h2>
-          <p>
-            Review simulated held messages. Release changes the local review
-            status; it does not deliver mail.
-          </p>
-        </div>
-        <select
-          className="field admin-filter"
-          aria-label="Quarantine status"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          {["Held", "Released", "Deleted", "All"].map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-      </div>
-      <div className="admin-panel">
-        {visible.map((row) => (
-          <div key={row.id} className="admin-quarantine">
-            <div>
-              <strong>{row.subject}</strong>
-              <p>
-                {row.sender} → {row.recipient}
-              </p>
-              <p>{row.reason}</p>
-              <Badge>{row.status}</Badge>
-            </div>
-            {row.status === "Held" && (
-              <div className="flex gap-2">
-                <button
-                  className="btn-secondary"
-                  onClick={() => setAction({ id: row.id, status: "Released" })}
-                >
-                  Release
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => setAction({ id: row.id, status: "Deleted" })}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-        {!visible.length && <Empty>No {status.toLowerCase()} messages.</Empty>}
-      </div>
-      {action && (
-        <Dialog
-          title="Confirm quarantine action"
-          onClose={() => setAction(null)}
-        >
-          <div className="space-y-4 p-6">
-            <p>
-              Mark this demo message as {action.status.toLowerCase()}? This
-              local review action cannot be undone. No message will be delivered
-              or removed from a real server.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button className="btn-secondary" onClick={() => setAction(null)}>
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  dispatch(adminChanged({ kind: "quarantine", ...action }));
-                  setAction(null);
-                  dispatch(notify({ text: "Demo quarantine status updated." }));
-                }}
-              >
-                Confirm action
-              </button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-    </>
-  );
-}
 function Audit() {
   const rows = useSelector((s) => s.admin.audit);
   const [query, setQuery] = useState("");
@@ -1682,11 +1597,20 @@ function Audit() {
             value={action}
             onChange={(e) => setAction(e.target.value)}
           >
-            {["All", "save", "delete", "settings", "quarantine", "monitor"].map(
-              (item) => (
-                <option key={item}>{item}</option>
-              ),
-            )}
+            {[
+              "All",
+              "save",
+              "delete",
+              "settings",
+              "monitor",
+              "storeSave",
+              "storeDelete",
+              "employeeSave",
+              "employeeBulk",
+              "employeeRemove",
+            ].map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </div>
         <div className="admin-table-scroll">
@@ -1847,8 +1771,8 @@ export default function AdminPage() {
           <Overview />
         ) : ["organization", "security"].includes(section) ? (
           <Settings key={section} section={section} />
-        ) : section === "quarantine" ? (
-          <Quarantine />
+        ) : section === "stores" ? (
+          <StoresPage />
         ) : section === "audit" ? (
           <Audit />
         ) : (

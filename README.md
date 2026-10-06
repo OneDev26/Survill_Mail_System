@@ -57,7 +57,7 @@ Storage uses `zoho-demo-v2:` keys and imports valid older mailbox data. Storage 
 
 ## Admin console
 
-Administrators see **Admin** in the top bar and **Admin tools** / **Email monitoring** in the account menu. There is no admin entry in the sidebar. Members cannot open admin routes. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, demo quarantine, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. Email monitoring reads all currently stored local mailbox copies, including drafts, with search, mailbox/folder/date filters and audited read-only review. All administration is local demo state; policies are not enforced by a server.
+Administrators see **Admin** in the top bar and **Admin tools** / **Email monitoring** in the account menu. There is no admin entry in the sidebar. Members cannot open admin routes. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, stores and employee email lists, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. Email monitoring reads all currently stored local mailbox copies, including drafts, with search, mailbox/folder/date filters and audited read-only review. All administration is local demo state; policies are not enforced by a server.
 
 
 Admin: alex.morgan@studio.co

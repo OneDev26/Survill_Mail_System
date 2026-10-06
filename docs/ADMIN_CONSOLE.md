@@ -12,7 +12,7 @@ Sign in as an active Administrator or Super administrator, then open **Admin** i
 - Mail routing: ordered sender-domain, recipient, or subject rules; quarantine/reject/forward actions and enable/disable configuration.
 - Sender controls: allow/block addresses or domains with reasons.
 - Security and retention: desired MFA, forwarding, IMAP/POP, session, password, and retention policies.
-- Quarantine: confirm simulated release/delete review decisions, and filter by status. Release does not deliver a message; delete changes the review status and does not purge content.
+- Stores: create/edit stores, manage employee names and emails, add up to 200 emails per batch, search, filter, and confirm removals. Stores replaces Quarantine; old bookmarks redirect to Stores.
 - Reports: counts derived from the current local mailbox, planned directory capacity, CSV download.
 - Audit: latest 1,000 mutations, actor/action search/filter, CSV download.
 - Organization: identity, admin contact, validated IANA time zone metadata. Displayed timestamps use the browser time zone.
@@ -25,15 +25,27 @@ This repository is a frontend demo. No provider credentials, mail server, databa
 
 Before production, connect these modules to an authenticated API and a durable organization-scoped database. Enforce membership, permissions, ownership, validation, and audit logging server-side on every request. Keep provider secrets in a server-side secret store. Integrate your actual mail provider using its documented, region-specific APIs and OAuth scopes; do not infer endpoints from UI route names.
 
-Suggested backend aggregates are organizations, domains, users, memberships, groups, aliases, routing rules, sender policies, security policies, quarantine decisions, and append-only audit events. Use unique organization/address constraints and transactional dependency checks. Use revision/version fields to prevent lost updates.
+Suggested backend aggregates are organizations, domains, users, memberships, groups, aliases, routing rules, sender policies, security policies, stores, store employee memberships, and append-only audit events. Use unique organization/address constraints and transactional dependency checks. Use revision/version fields to prevent lost updates.
 
-Provisioning, DNS verification, imports/migrations, delivery changes, retention jobs, and account lifecycle changes need background jobs with idempotency, retries, progress, and failure reporting. A production quarantine release should require permission and cause actual delivery only after provider acknowledgement. Derive reports from server telemetry and clearly distinguish planned allocation from measured usage.
+Provisioning, DNS verification, imports/migrations, delivery changes, retention jobs, and account lifecycle changes need background jobs with idempotency, retries, progress, and failure reporting. Derive reports from server telemetry and clearly distinguish planned allocation from measured usage.
 
 Additional production modules include SSO/directory sync, MFA enrollment/recovery, session/device revocation, secure password reset, mailbox delegation, shared mailboxes, bulk provisioning, migration connectors, backup/restore, retention execution, legal holds and e-discovery, DLP rules, integration credentials/webhooks, abuse limits, service health, and billing/licenses. These require backend/provider capabilities and are not simulated as working features in this console.
 
 ## Validation
 
-`npm run build`, `npm run lint`, and `npm test` cover the application. `tests/monitoring.spec.mjs` exercises role gating, mailbox isolation, local delivery with Bcc protection, read-only monitoring, attachments, read-access auditing, and suspension. `tests/admin.spec.mjs` exercises persistence, owner/dependency protection, validation, directory workflows, policy configuration, confirmed quarantine actions, export, and mobile layout alongside the existing mailbox tests.
+`npm run build`, `npm run lint`, and `npm test` cover the application. `tests/monitoring.spec.mjs` exercises role gating, mailbox isolation, local delivery with Bcc protection, read-only monitoring, attachments, read-access auditing, and suspension. `tests/admin.spec.mjs` exercises persistence, owner/dependency protection, validation, directory workflows, policy configuration, export, and mobile layout alongside the existing mailbox tests.
+
+## Stores and employee emails
+
+Open **Admin > Stores**, add a store with a unique 2–30 character code, then select **Manage employees**. Store names and employee names are limited to 100 characters; location is optional. Codes are normalized to uppercase, and email addresses to lowercase. The same email can belong to multiple stores, but cannot be duplicated within one store.
+
+Employee entries are store memberships, not newly provisioned mail accounts. Existing directory accounts are recognized by email and display their active/suspended status; other addresses are labeled email records. Adding, editing, or removing a membership never changes an account's permissions, mailbox, or messages. Inactive stores keep their employees but reject new or edited memberships until reactivated.
+
+Bulk entry accepts newline-, comma-, or semicolon-separated emails, up to 200 per batch. A bad or duplicate address rejects the entire batch. Store and employee searches, store status filters, and employee pagination are available. Store deletion requires an empty employee list and confirmation. Every mutation records the signed-in administrator in the audit log.
+
+Stores are persisted in the existing admin storage record. Older records without stores migrate to an empty store list without resetting users, policies, or audit history. Legacy quarantine data is retained for storage compatibility, but its screen and actions are removed. Existing routing rules retain their configured actions.
+
+`tests/stores.spec.mjs` covers persistence, editing/removal, duplicate validation, atomic bulk entry, inactive-store rules, legacy data migration, mobile layout, and rejection of member access and mutations.
 
 ## Email monitoring and separate mailboxes
 
