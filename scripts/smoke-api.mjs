@@ -1,6 +1,6 @@
 // Real backend smoke test. Does not send mail. --write creates temporary owned
 // resources and deletes them in finally; use a dedicated test account/database.
-const origin = (process.env.API_URL || "http://localhost:4000").replace(
+const origin = (process.env.API_URL || "https://mail-system.ngrok.app").replace(
   /\/$/,
   "",
 );

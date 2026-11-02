@@ -5,7 +5,7 @@ React 19, Redux Toolkit and Vite frontend for the Survill Mail backend. All appl
 ## Run locally
 
 1. Start the backend and its PostgreSQL database, apply its migrations and provision a test user.
-2. Copy `.env.example` to `.env`. Set `VITE_API_BASE_URL` to the API origin, without `/api` (default `http://localhost:4000`).
+2. Copy `.env.example` to `.env`. Set `VITE_API_BASE_URL` to the API origin, without `/api` (default `https://mail-system.ngrok.app`).
 3. Configure backend CORS for the exact frontend origin, normally `http://localhost:5173`.
 4. Run `npm install`, then `npm run dev`. Sign in with a backend account.
 

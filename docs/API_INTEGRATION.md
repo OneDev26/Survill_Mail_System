@@ -7,10 +7,10 @@ Reviewed 31 October 2026 against the supplied HTML reference and backend source.
 Copy `.env.example` to `.env`:
 
 ```dotenv
-VITE_API_BASE_URL=http://localhost:4000
+VITE_API_BASE_URL=https://mail-system.ngrok.app
 ```
 
-Use an origin without `/api`; the reference names `https://mailapi.survill.com` for deployment. Restart Vite after environment changes. Start the backend/PostgreSQL separately and provision an account through backend administration. CORS must allow the exact frontend origin. Keep the frontend and API on same-site hosts for the documented SameSite=Lax refresh cookie; localhost and 127.0.0.1 are different hosts.
+Use an origin without `/api`; the hosted backend is `https://mail-system.ngrok.app`. Restart Vite after environment changes. Start the backend/PostgreSQL separately and provision an account through backend administration. CORS must allow the exact frontend origin. Keep the frontend and API on same-site hosts for the documented SameSite=Lax refresh cookie; localhost and 127.0.0.1 are different hosts.
 
 There is no alternative local-data mode, sample login or public registration flow.
 

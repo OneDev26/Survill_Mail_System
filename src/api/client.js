@@ -1,7 +1,7 @@
 import axios from "axios";
 export const apiClient = axios.create({
   baseURL: (
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
+    import.meta.env.VITE_API_BASE_URL || "https://mail-system.ngrok.app"
   ).replace(/\/$/, ""),
   timeout: 20000,
   withCredentials: true,
