@@ -1,65 +1,54 @@
-# Zoho Mail inspired workspace
+# Survill Mail
 
-Responsive React, Tailwind CSS v4, Redux Toolkit, and React Router app with role-aware local demo accounts and seeded data. Delivery between directory users is simulated in this browser; no real email is sent.
+React 19, Redux Toolkit and Vite frontend for the Survill Mail backend. All application data comes from the API. There are no bundled accounts, seeded mailboxes, browser-storage persistence adapters or simulated delivery.
 
-## Start
+## Run locally
 
-```sh
-npm install
-npm run dev
-```
+1. Start the backend and its PostgreSQL database, apply its migrations and provision a test user.
+2. Copy `.env.example` to `.env`. Set `VITE_API_BASE_URL` to the API origin, without `/api` (default `http://localhost:4000`).
+3. Configure backend CORS for the exact frontend origin, normally `http://localhost:5173`.
+4. Run `npm install`, then `npm run dev`. Sign in with a backend account.
 
-Admin login: **alex.morgan@studio.co** / **Demo@1234**. Member login: **sophia@studio.co** / **Demo@1234**. All active directory accounts use this shared demo password; their directory role determines admin access. The login page also has a Fill demo credentials button.
+Restart Vite after changing environment variables. On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`. The frontend cannot start the backend or create an account by itself. Never put passwords, provider keys or other secrets in `VITE_*` variables.
 
-```sh
-npm run build
-npm run lint
-npm test
-npm run format:check
-```
-
-Browser tests use installed Microsoft Edge on Windows. On other platforms run `npx playwright install chromium` first. Set `PW_BROWSER_CHANNEL` to select another installed Chromium browser. Tests start a separate Vite server on port 4173 and use fresh browser contexts, without changing your personal browser data.
-
-## Features
-
-- Protected routes, demo sign-in validation, password visibility, remember-me sessions, account menu, logout, and demo access help.
-- Editable profile and avatar upload/preview/removal, reflected across the workspace.
-- Folder/label navigation, search, unread/starred/attachment filters, sort, pagination, bulk selection, read/unread, archive, spam, trash, restore, move, labels, and undo.
-- Confirmed permanent deletion and empty trash; configurable trash confirmation.
-- Compose, Cc/Bcc, contacts suggestions, reply/reply-all/forward, signatures, debounced draft autosave, manual save/discard, attachments/downloads, Ctrl/Cmd+Enter to send.
-- Custom folders/labels and persistent inbox preferences.
-- Contacts, tasks, notes, and monthly calendar: create/edit/delete, validation, search, and persistence.
-- Mobile navigation, responsive reading pane, accessible native dialogs, focus restoration, notifications, and empty states.
-
-## Structure
+## Code structure
 
 ```text
 src/
-  api/          Demo authentication, data, storage, future axios client
-  components/   Shared layout, mail components, compose, dialogs, editor
-  pages/        Login, mail, profile, settings, workspace pages
+  api/                  HTTP client, endpoint adapters, response/form mappings
   redux/
-    slice/      auth, profile, mail, settings, workspace, ui
-    thunks/     Guidance for future async API workflows
-    store.js    Store configuration, hydration, persistence
-  utils/        Pure mail filtering and recipient helpers
-tests/          Browser workflow tests
-docs/           API integration guide
+    thunks/             Async workflows grouped by domain
+    slice/              Data and pending/fulfilled/rejected request state
+    store.js            Store configuration and DevTools redaction
+    rootReducer.js      Account-state reset on logout/session expiry
+    requestState.js     Shared request lifecycle tracking
+  pages/                Routed screens
+  components/           Shared navigation, editors, dialogs and mail UI
+  utils/                Small display, access and error helpers
+tests/api.spec.mjs       Browser workflow and thunk integration tests
+scripts/smoke-api.mjs    Optional real-backend smoke test
+docs/                   Architecture, API setup, endpoint gaps and test report
 ```
 
-See [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md). Domain state is separated into slices; no network thunks or fabricated HTTP endpoints run in the demo.
+Components dispatch domain thunks and use `.unwrap()` to handle success/failure. They do not import the HTTP client or endpoint service; ESLint enforces this boundary. Thunks call API adapters, and reducers commit confirmed data. Tokens stay in memory, and the HttpOnly cookie restores sessions.
 
-## Demo boundaries
+See [architecture](docs/ARCHITECTURE.md) and [thunk guide](src/redux/thunks/README.md) before adding a workflow.
 
-Active directory accounts have separate local mailboxes, profiles, settings, and workspace data. Login is client-side simulation; password-recovery help does not send email. Local data remains after logout so the same account can resume. Attachments are limited to 1 MB per message; avatars to 200 KB. Calendar events are local, same-day events without recurrence or invitations. Real delivery, multi-device synchronization, and production authentication/authorization require a backend.
+## Validation
 
-Storage uses `zoho-demo-v2:` keys and imports valid older mailbox data. Storage failure displays a persistent warning and the app continues in memory. Clear this site's browser storage to reset demo data. Serve index.html for unknown application paths in production so direct routes like /profile work.
+```sh
+npm run lint
+npm run format:check
+npm run build
+npm test
+```
 
-## Admin console
+The Playwright suite uses installed Microsoft Edge on Windows; elsewhere install Chromium with `npx playwright install chromium`. Set `PW_BROWSER_CHANNEL` to use another Chromium browser. Tests start a separate server on port 4174, intercept API traffic and use fresh browser contexts. Test fixtures live only in tests and are not shipped with the app. `npm run test:api` is an alias for the same suite.
 
-Administrators see **Admin** in the top bar and **Admin tools** / **Email monitoring** in the account menu. There is no admin entry in the sidebar. Members cannot open admin routes. Includes users, domains, groups, aliases, routing, sender controls, security/retention configuration, stores and employee email lists, reports, audit history, and organization settings. See [docs/ADMIN_CONSOLE.md](docs/ADMIN_CONSOLE.md) for workflows and production integration requirements. Email monitoring reads all currently stored local mailbox copies, including drafts, with search, mailbox/folder/date filters and audited read-only review. All administration is local demo state; policies are not enforced by a server.
+For a reachable real backend, set `API_URL`, `TEST_EMAIL` and `TEST_PASSWORD`, then run `npm run test:backend`. Add `-- --write` only with a dedicated test account to exercise temporary resource CRUD and cleanup. This script never sends mail.
 
+## API coverage and remaining work
 
-Admin: alex.morgan@studio.co
-Member: sophia@studio.co
-Password: Demo@1234
+The supplied reference matches all **69 registered backend routes**. The adapter covers 68 JSON/multipart routes; signed file URLs are consumed directly. Supported screens cover authentication/recovery, mail/drafts/attachments, personal workspace records, profile/settings, users/aliases, known domains, inbound logs and contact sync.
+
+Features without backend support are unavailable rather than simulated. [Additional endpoint requirements](docs/ENDPOINT_GAPS.md) describes missing stores, organization-wide monitoring, groups, hosted domains, routing, policies and reporting, plus existing-contract issues. [API integration](docs/API_INTEGRATION.md) records behavior and UI limitations. [Test report](docs/TEST_REPORT.md) distinguishes mocked frontend coverage from real deployment verification.

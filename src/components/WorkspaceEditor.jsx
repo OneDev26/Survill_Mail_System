@@ -40,7 +40,8 @@ export default function WorkspaceEditor({
 }) {
   const [form, setForm] = useState(initial);
   const [error, setError] = useState("");
-  function submit(event) {
+  const [busy, setBusy] = useState(false);
+  async function submit(event) {
     event.preventDefault();
     const value = Object.fromEntries(
       Object.entries(form).map(([key, item]) => [
@@ -63,11 +64,20 @@ export default function WorkspaceEditor({
       setError("A contact with this email address already exists.");
       return;
     }
-    if (collection === "events" && value.endTime <= value.time) {
+    if (
+      collection === "events" &&
+      new Date(`${value.endDate || value.date}T${value.endTime}`) <
+        new Date(`${value.date}T${value.time}`)
+    ) {
       setError("The end time must be after the start time.");
       return;
     }
-    onSave({ ...value, id: value.id || crypto.randomUUID() });
+    setBusy(true);
+    try {
+      await onSave(value);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Dialog
@@ -75,47 +85,62 @@ export default function WorkspaceEditor({
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-4 p-6">
-        {fields[collection].map(([key, label, type, required], index) => (
-          <label key={key} className="block">
-            <span className="field-label">
-              {label}
-              {required ? " *" : ""}
-            </span>
-            {type === "textarea" ? (
-              <textarea
-                className="field min-h-32"
-                maxLength={10000}
-                value={form[key] || ""}
-                onChange={(event) =>
-                  setForm({ ...form, [key]: event.target.value })
-                }
-              />
-            ) : (
+        <fieldset disabled={busy} className="space-y-4">
+          {fields[collection].map(([key, label, type, required], index) => (
+            <label key={key} className="block">
+              <span className="field-label">
+                {label}
+                {required ? " *" : ""}
+              </span>
+              {type === "textarea" ? (
+                <textarea
+                  className="field min-h-32"
+                  maxLength={10000}
+                  value={form[key] || ""}
+                  onChange={(event) =>
+                    setForm({ ...form, [key]: event.target.value })
+                  }
+                />
+              ) : (
+                <input
+                  autoFocus={index === 0}
+                  className="field"
+                  type={type}
+                  maxLength={200}
+                  required={required}
+                  value={form[key] || ""}
+                  onChange={(event) =>
+                    setForm({ ...form, [key]: event.target.value })
+                  }
+                />
+              )}
+            </label>
+          ))}
+          {collection === "events" && (
+            <label className="block">
+              <span className="field-label">
+                End date (optional, defaults to start date)
+              </span>
               <input
-                autoFocus={index === 0}
+                type="date"
                 className="field"
-                type={type}
-                maxLength={200}
-                required={required}
-                value={form[key] || ""}
-                onChange={(event) =>
-                  setForm({ ...form, [key]: event.target.value })
-                }
+                value={form.endDate || ""}
+                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
               />
-            )}
-          </label>
-        ))}
-        {error && (
-          <p role="alert" className="text-xs text-red-600">
-            {error}
-          </p>
-        )}
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" className="btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn-primary">Save {singular[collection]}</button>
-        </div>
+            </label>
+          )}
+          {error && (
+            <p role="alert" className="text-xs text-red-600">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" className="btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="btn-primary">Save {singular[collection]}</button>
+          </div>
+        </fieldset>
       </form>
     </Dialog>
   );

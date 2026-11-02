@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { Avatar, IconButton, LabelBadge } from "./Ui";
 import { useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
+import { fetchAttachment } from "../redux/thunks/mailThunks";
+import { reportError } from "../utils/errors";
 export default function MessageView(props) {
   const [lastMessage, setLastMessage] = useState(props.message);
   if (props.message && props.message !== lastMessage) {
@@ -41,21 +44,21 @@ function MessageContent({
 }) {
   const labels = useSelector((state) => state.mail.labels);
   const ownEmail = useSelector((state) => state.profile.email);
+  const dispatch = useDispatch();
   if (!message) return null;
-  function download(attachment) {
-    const url =
-      attachment.dataUrl ||
-      URL.createObjectURL(
-        new Blob([attachment.content || "Demo attachment"], {
-          type: "text/plain",
-        }),
-      );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = attachment.name;
-    link.click();
-    if (!attachment.dataUrl) setTimeout(() => URL.revokeObjectURL(url), 1000);
+  async function download(attachment) {
+    try {
+      const result = await dispatch(fetchAttachment(attachment.id)).unwrap();
+      const link = document.createElement("a");
+      link.href = result.url;
+      link.rel = "noopener noreferrer";
+      link.target = "_blank";
+      link.click();
+    } catch (error) {
+      reportError(dispatch, error);
+    }
   }
+
   return (
     <section
       aria-label="Message preview"
@@ -157,7 +160,17 @@ function MessageContent({
           </button>
         </div>
         <div className="whitespace-pre-wrap break-words text-[13px] leading-[1.95] text-slate-600">
-          {message.body}
+          {message.html ? (
+            <iframe
+              title="Email content"
+              sandbox=""
+              referrerPolicy="no-referrer"
+              className="min-h-80 w-full border-0"
+              srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline';"><base target="_blank">${message.html}`}
+            />
+          ) : (
+            message.body
+          )}
         </div>
         {message.attachments.length > 0 && (
           <div className="mt-7 border-t border-slate-100 pt-5">

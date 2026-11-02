@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   CalendarDays,
@@ -15,7 +15,12 @@ import {
   StickyNote,
   CheckCheck,
 } from "lucide-react";
-import { itemSaved, itemDeleted } from "../redux/slice/workspaceSlice";
+import {
+  fetchWorkspace,
+  saveWorkspaceItem,
+  deleteWorkspaceItem,
+} from "../redux/thunks/workspaceThunks";
+import { reportError } from "../utils/errors";
 import { composeOpened, notify } from "../redux/slice/uiSlice";
 import { Avatar, IconButton } from "../components/Ui";
 import { initials } from "../utils/mail";
@@ -55,6 +60,22 @@ export default function WorkspacePage({ kind }) {
   const items = useSelector((state) => state.workspace[collection]);
   const { title, single, description, icon: Icon } = config[kind];
   const dispatch = useDispatch();
+  const isAdmin = useSelector((s) => s.auth.session?.role === "admin");
+  const [loadState, setLoadState] = useState("Loading…");
+  useEffect(() => {
+    let active = true;
+    dispatch(fetchWorkspace(collection))
+      .unwrap()
+      .then(() => {
+        if (active) setLoadState("");
+      })
+      .catch((error) => {
+        if (active) setLoadState(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [dispatch, collection]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const [editor, setEditor] = useState(null);
@@ -82,8 +103,13 @@ export default function WorkspacePage({ kind }) {
           ? `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)
           : 0,
     );
-  function save(item) {
-    dispatch(itemSaved({ collection, item }));
+  async function save(item) {
+    try {
+      await dispatch(saveWorkspaceItem({ collection, item })).unwrap();
+    } catch (error) {
+      reportError(dispatch, error);
+      return;
+    }
     setEditor(null);
     dispatch(
       notify({
@@ -104,6 +130,30 @@ export default function WorkspacePage({ kind }) {
   );
   return (
     <div className="thin-scrollbar flex-1 overflow-y-auto p-5 sm:p-8">
+      {loadState && (
+        <p role="status" className="mb-4">
+          {loadState}{" "}
+          {loadState !== "Loading…" && (
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setLoadState("Loading…");
+                dispatch(fetchWorkspace(collection))
+                  .unwrap()
+                  .then(() => setLoadState(""))
+                  .catch((e) => setLoadState(e.message));
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </p>
+      )}
+      {collection !== "contacts" && (
+        <p className="mb-3 text-xs text-slate-500">
+          The server returns up to 1,000 records.
+        </p>
+      )}
       <div className="w-full">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -274,11 +324,13 @@ export default function WorkspacePage({ kind }) {
                       checked={Boolean(item.done)}
                       onChange={() =>
                         dispatch(
-                          itemSaved({
+                          saveWorkspaceItem({
                             collection,
                             item: { ...item, done: !item.done },
                           }),
                         )
+                          .unwrap()
+                          .catch((error) => reportError(dispatch, error))
                       }
                     />
                   )}
@@ -338,11 +390,17 @@ export default function WorkspacePage({ kind }) {
                     <IconButton
                       icon={Pencil}
                       label={`Edit ${item.name || item.title}`}
+                      disabled={
+                        item.readOnly || (item.scope === "company" && !isAdmin)
+                      }
                       onClick={() => setEditor(item)}
                     />
                     <IconButton
                       icon={Trash2}
                       label={`Delete ${item.name || item.title}`}
+                      disabled={
+                        item.readOnly || (item.scope === "company" && !isAdmin)
+                      }
                       onClick={() => setConfirm(item)}
                     />
                   </div>
@@ -373,11 +431,18 @@ export default function WorkspacePage({ kind }) {
       {confirm && (
         <ConfirmDialog
           title={`Delete ${single}?`}
-          description={`“${confirm.name || confirm.title}” will be permanently removed from this demo workspace.`}
+          description={`“${confirm.name || confirm.title}” will be permanently removed from this server.`}
           confirmLabel="Delete"
           onClose={() => setConfirm(null)}
-          onConfirm={() => {
-            dispatch(itemDeleted({ collection, id: confirm.id }));
+          onConfirm={async () => {
+            try {
+              await dispatch(
+                deleteWorkspaceItem({ collection, id: confirm.id }),
+              ).unwrap();
+            } catch (error) {
+              reportError(dispatch, error);
+              return;
+            }
             setConfirm(null);
             dispatch(
               notify({

@@ -9,9 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "playwright test",
+    "test:api": "playwright test",
+    "test:backend": "node scripts/smoke-api.mjs",
     "test:ui": "playwright test --ui",
-    "format": "prettier --write src tests playwright.config.mjs",
-    "format:check": "prettier --check src tests playwright.config.mjs"
+    "format": "prettier --write src tests scripts playwright.config.mjs",
+    "format:check": "prettier --check src tests scripts playwright.config.mjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.13.0",

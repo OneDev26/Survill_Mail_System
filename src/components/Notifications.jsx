@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AlertCircle, Check, X } from "lucide-react";
 import { notificationDismissed } from "../redux/slice/uiSlice";
-import { undoChange } from "../redux/slice/mailSlice";
+import { undoMailChange, fetchFolders } from "../redux/thunks/mailThunks";
+import { reportError } from "../utils/errors";
 export default function Notifications() {
   const dispatch = useDispatch();
   const notification = useSelector((state) => state.ui.notification);
@@ -30,9 +31,14 @@ export default function Notifications() {
       {notification.undo && undo && (
         <button
           className="font-semibold text-violet-200 hover:underline"
-          onClick={() => {
-            dispatch(undoChange());
-            dispatch(notificationDismissed());
+          onClick={async () => {
+            try {
+              await dispatch(undoMailChange()).unwrap();
+              await dispatch(fetchFolders()).unwrap();
+              dispatch(notificationDismissed());
+            } catch (error) {
+              reportError(dispatch, error);
+            }
           }}
         >
           Undo

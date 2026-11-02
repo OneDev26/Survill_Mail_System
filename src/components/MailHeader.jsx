@@ -10,12 +10,12 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  ScanEye,
 } from "lucide-react";
 import { Avatar, IconButton } from "./Ui";
 import { initials } from "../utils/mail";
 import { canAdminister, sessionUser } from "../utils/access";
-import { signedOut } from "../redux/slice/authSlice";
+import { logout } from "../redux/thunks/authThunks";
+import { reportError } from "../utils/errors";
 export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
   const [menu, setMenu] = useState(false);
   const ref = useRef(null);
@@ -65,6 +65,7 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
           placeholder="Search mail in this folder"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none"
         />
+        //
         {query && (
           <IconButton
             icon={X}
@@ -133,14 +134,6 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
                     <ShieldCheck size={16} />
                     Admin tools
                   </Link>
-                  <Link
-                    to="/admin/monitoring"
-                    onClick={() => setMenu(false)}
-                    className="flex items-center gap-2 rounded-lg p-3 text-sm hover:bg-slate-50"
-                  >
-                    <ScanEye size={16} />
-                    Email monitoring
-                  </Link>
                 </>
               )}
               <Link
@@ -161,8 +154,13 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
               </Link>
               <button
                 className="flex w-full items-center gap-2 rounded-lg p-3 text-left text-sm text-red-600 hover:bg-red-50"
-                onClick={() => {
-                  dispatch(signedOut());
+                onClick={async () => {
+                  try {
+                    await dispatch(logout()).unwrap();
+                  } catch (error) {
+                    reportError(dispatch, error);
+                    return;
+                  }
                   navigate("/login", { replace: true });
                 }}
               >

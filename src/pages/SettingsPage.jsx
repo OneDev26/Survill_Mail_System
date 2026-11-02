@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
 import { FolderPlus, Tag, Trash2 } from "lucide-react";
-import { settingsUpdated } from "../redux/slice/settingsSlice";
+import { normalizeSettings } from "../redux/slice/settingsSlice";
+import { saveSettings } from "../redux/thunks/profileThunks";
+import { reportError } from "../utils/errors";
 import {
-  folderAdded,
-  folderDeleted,
-  labelSaved,
-  labelDeleted,
-} from "../redux/slice/mailSlice";
+  createFolder,
+  deleteFolder,
+  createLabel,
+  deleteLabel,
+  fetchFolders,
+} from "../redux/thunks/mailThunks";
 import { notify } from "../redux/slice/uiSlice";
 import { systemFolders } from "../utils/mail";
 import { IconButton } from "../components/Ui";
@@ -16,22 +19,37 @@ import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function SettingsPage() {
   const settings = useSelector((state) => state.settings);
-  const { labels, customFolders } = useSelector((state) => state.mail);
-  const [form, setForm] = useState(settings);
+  const { labels, customFolders, folders } = useSelector((state) => state.mail);
+  const [form, setForm] = useState(() => normalizeSettings(settings));
   const [name, setName] = useState("");
   const [kind, setKind] = useState("folder");
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(null);
   const dispatch = useDispatch();
   const { hash } = useLocation();
+  const [busy, setBusy] = useState(false);
+  async function execute(action) {
+    setBusy(true);
+    try {
+      await dispatch(action).unwrap();
+      await dispatch(fetchFolders()).unwrap();
+      return true;
+    } catch (error) {
+      reportError(dispatch, error);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     if (hash === "#organization")
       document
         .getElementById("organization")
         ?.scrollIntoView({ behavior: "smooth" });
   }, [hash]);
-  const dirty = JSON.stringify(form) !== JSON.stringify(settings);
-  function add(event) {
+  const dirty =
+    JSON.stringify(form) !== JSON.stringify(normalizeSettings(settings));
+  async function add(event) {
     event.preventDefault();
     const clean = name.trim();
     const existing = [
@@ -47,15 +65,15 @@ export default function SettingsPage() {
       setError("That name is already in use.");
       return;
     }
-    dispatch(
+    const saved = await execute(
       kind === "folder"
-        ? folderAdded(clean)
-        : labelSaved({
+        ? createFolder(clean)
+        : createLabel({
             name: clean,
-            dot: "bg-violet-400",
-            badge: "bg-violet-50 text-violet-600",
+            color: "#8b5cf6",
           }),
     );
+    if (saved === false) return;
     setName("");
     setError("");
     dispatch(
@@ -64,16 +82,16 @@ export default function SettingsPage() {
   }
   return (
     <div className="thin-scrollbar flex-1 overflow-y-auto p-5 sm:p-8">
-      <div className="w-full">
+      <fieldset disabled={busy} className="w-full">
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="mb-7 mt-2 text-sm text-slate-500">
           Make your workspace work for you.
         </p>
         <form
           className="space-y-6"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
-            dispatch(settingsUpdated(form));
+            if (!(await execute(saveSettings(form)))) return;
             dispatch(notify({ text: "Preferences saved." }));
           }}
         >
@@ -231,7 +249,7 @@ export default function SettingsPage() {
             ))}
           </div>
         </section>
-      </div>
+      </fieldset>
       {confirm && (
         <ConfirmDialog
           title={`Delete ${confirm.kind}?`}
@@ -242,12 +260,21 @@ export default function SettingsPage() {
           }
           confirmLabel="Delete"
           onClose={() => setConfirm(null)}
-          onConfirm={() => {
-            dispatch(
+          onConfirm={async () => {
+            const saved = await execute(
               confirm.kind === "folder"
-                ? folderDeleted(confirm.name)
-                : labelDeleted(confirm.name),
+                ? deleteFolder(
+                    folders.find(
+                      (folder) =>
+                        folder.name === confirm.name &&
+                        folder.kind === "custom",
+                    ).id,
+                  )
+                : deleteLabel(
+                    labels.find((label) => label.name === confirm.name).id,
+                  ),
             );
+            if (saved === false) return;
             setConfirm(null);
             dispatch(notify({ text: "Organization updated." }));
           }}

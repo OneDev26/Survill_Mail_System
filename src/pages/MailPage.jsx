@@ -1,288 +1,314 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FolderInput, Paperclip, ShieldAlert, Trash2 } from "lucide-react";
-import { composeOpened, notify } from "../redux/slice/uiSlice";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
+  fetchMessages,
+  fetchMessage,
+  fetchFolders,
+  bulkUpdateMessages,
   deleteMessages,
-  messageRead,
-  toggleStar,
-  updateMessages,
-} from "../redux/slice/mailSlice";
-import {
-  belongsToFolder,
-  filterMessages,
-  replyRecipients,
-  systemFolders,
-} from "../utils/mail";
+  emptyFolder,
+} from "../redux/thunks/mailThunks";
+import { folderName, messageModel } from "../api/models";
+import { reportError } from "../utils/errors";
+import { composeOpened, notify } from "../redux/slice/uiSlice";
 import MailList from "../components/MailList";
 import MessageView from "../components/MessageView";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function MailPage() {
   const { folder } = useParams();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   return (
     <Mailbox
       key={`${folder}:${params.get("q") || ""}`}
       folder={folder}
-      params={params}
-      setParams={setParams}
+      query={params.get("q") || ""}
     />
   );
 }
-
-function Mailbox({ folder, params, setParams }) {
+function Mailbox({ folder, query }) {
   const dispatch = useDispatch();
-  const { messages, labels, customFolders } = useSelector(
-    (state) => state.mail,
-  );
-  const settings = useSelector((state) => state.settings);
-  const profile = useSelector((state) => state.profile);
+  const mail = useSelector((s) => s.mail);
+  const settings = useSelector((s) => s.settings);
+  const ownEmail = useSelector((s) => s.profile.email);
+  const [result, setResult] = useState({ items: [], total: 0, totalPages: 1 });
+  const [active, setActive] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [page, setPage] = useState(1);
   const [filter, setFilter] = useState("All");
   const [sort, setSort] = useState("newest");
-  const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState([]);
   const [attachments, setAttachments] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(null);
-  const query = params.get("q") || "";
-  const activeId = params.get("message");
-  const validFolder =
-    systemFolders.includes(folder) ||
-    customFolders.includes(folder) ||
-    labels.some((label) => "label:" + label.name === folder);
-  const filtered = filterMessages(messages, {
-    folder,
-    query,
-    filter,
-    sort,
-    attachments,
-  });
-  const pageCount = Math.max(1, Math.ceil(filtered.length / settings.pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const visible = filtered.slice(
-    (currentPage - 1) * settings.pageSize,
-    currentPage * settings.pageSize,
-  );
-  const active = messages.find(
-    (m) => m.id === activeId && belongsToFolder(m, folder),
-  );
-  const selectedIds = selected.filter((id) =>
-    filtered.some((m) => m.id === id),
-  );
-  function close() {
-    setParams(
-      (previous) => {
-        previous.delete("message");
-        return previous;
-      },
-      { replace: true },
-    );
-  }
-  function open(message) {
-    if (message.folder === "Drafts") {
-      dispatch(composeOpened(message));
-      return;
-    }
-    setParams(
-      (previous) => {
-        previous.set("message", message.id);
-        return previous;
-      },
-      { replace: true },
-    );
-    if (settings.markReadOnOpen) dispatch(messageRead(message.id));
-  }
-  function perform(type, ids) {
-    if (type === "delete") dispatch(deleteMessages(ids));
-    else
-      dispatch(
-        updateMessages({
-          ids,
-          changes:
-            type === "read" || type === "unread"
-              ? { unread: type === "unread" }
-              : { folder: type },
+  const [version, setVersion] = useState(0);
+  const folderId =
+    folder === "Starred"
+      ? "starred"
+      : mail.folders.find((f) => folderName(f) === folder)?.id;
+  const labelId = folder.startsWith("label:")
+    ? mail.labels.find((l) => l.name === folder.slice(6))?.id
+    : undefined;
+  useEffect(() => {
+    let cancelled = false;
+    let request;
+    const timer = setTimeout(() => {
+      if (!folderId && !labelId) {
+        setError("Folder not available on the server.");
+        return;
+      }
+      setBusy(true);
+      setError("");
+      request = dispatch(
+        fetchMessages({
+          folder: labelId ? "all" : folderId,
+          label: labelId,
+          q: query || undefined,
+          page,
+          pageSize: settings.pageSize,
+          sort,
+          unread: filter === "Unread" ? true : undefined,
+          starred: filter === "Starred" ? true : undefined,
+          hasAttachments: attachments || undefined,
         }),
       );
-    setSelected([]);
-    close();
-    setConfirm(null);
+      request
+        .unwrap()
+        .then((data) => {
+          if (!cancelled) {
+            setResult(data);
+            setSelected([]);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) setError(err.message);
+        })
+        .finally(() => {
+          if (!cancelled) setBusy(false);
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      request?.abort();
+    };
+  }, [
+    dispatch,
+    folderId,
+    labelId,
+    query,
+    page,
+    settings.pageSize,
+    sort,
+    filter,
+    attachments,
+    version,
+    mail.revision,
+  ]);
+  const messages = result.items.map((m) =>
+    messageModel(m, mail.folders, mail.labels),
+  );
+  async function open(message) {
+    try {
+      const data = await dispatch(
+        fetchMessage({ id: message.id, markRead: settings.markReadOnOpen }),
+      ).unwrap();
+      const detail = messageModel(data.message, mail.folders, mail.labels);
+      if (detail.isDraft) dispatch(composeOpened(detail));
+      else setActive(detail);
+      setVersion((v) => v + 1);
+      await dispatch(fetchFolders()).unwrap();
+    } catch (err) {
+      reportError(dispatch, err);
+    }
+  }
+  async function perform(type, ids, extra = {}) {
+    setBusy(true);
+    try {
+      if (type === "delete") await dispatch(deleteMessages(ids)).unwrap();
+      else if (type === "empty")
+        await dispatch(emptyFolder(folder.toLowerCase())).unwrap();
+      else {
+        await dispatch(
+          bulkUpdateMessages({ ids, action: type, ...extra }),
+        ).unwrap();
+      }
+      setActive(null);
+      setSelected([]);
+      setConfirm(null);
+      setVersion((v) => v + 1);
+      await dispatch(fetchFolders()).unwrap();
+      dispatch(
+        notify({
+          text: "Mailbox updated.",
+          undo: !["delete", "empty", "addLabels", "removeLabels"].includes(
+            type,
+          ),
+        }),
+      );
+    } catch (err) {
+      reportError(dispatch, err);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function action(type, ids = selected) {
+    if (!ids.length) return;
+    const mapping = {
+      Inbox:
+        folder === "Spam" ? "notSpam" : folder === "Trash" ? "restore" : "move",
+      Archive: "archive",
+      Trash: "trash",
+      Spam: "spam",
+    };
+    const action = mapping[type] || type;
+    const extra = action === "move" ? { folderId: "inbox" } : {};
+    if (action === "delete" || (action === "trash" && settings.confirmTrash))
+      setConfirm({ action, ids, extra });
+    else perform(action, ids, extra);
+  }
+  function compose(mode, message) {
+    const forward = mode === "forward";
+    const recipients = [
+      ...new Set(
+        [
+          message.replyTo || message.email,
+          ...(mode === "replyAll" ? [message.to, message.cc] : []),
+        ]
+          .flatMap((v) => (v || "").split(","))
+          .map((s) => s.trim())
+          .filter((s) => s && s.toLowerCase() !== ownEmail.toLowerCase()),
+      ),
+    ];
     dispatch(
-      notify({
-        text:
-          type === "delete"
-            ? `${ids.length} message(s) permanently deleted.`
-            : type === "read" || type === "unread"
-              ? `${ids.length} message(s) marked ${type}.`
-              : `${ids.length} message(s) moved to ${type}.`,
-        undo: type !== "delete",
+      composeOpened({
+        to: forward ? "" : recipients.join(", "),
+        subject: `${forward ? "Fwd" : "Re"}: ${message.subject}`,
+        body: `${settings.useSignature ? settings.signature : ""}\n\nOn ${message.date}, ${message.sender} wrote:\n${message.body}`,
+        ...(forward
+          ? { forwardOfMessageId: message.id }
+          : { replyToMessageId: message.id }),
       }),
     );
   }
-  function action(type, ids = selectedIds) {
-    if (!ids.length) return;
-    if (type === "delete" || (type === "Trash" && settings.confirmTrash)) {
-      setConfirm({ type, ids });
-      return;
-    }
-    perform(type, ids);
-  }
-  function compose(mode, message) {
-    const signature = settings.useSignature ? `\n\n${settings.signature}` : "";
-    if (mode === "forward")
-      dispatch(
-        composeOpened({
-          subject: `Fwd: ${message.subject}`,
-          body: `${signature}\n\n---------- Forwarded message ----------\nFrom: ${message.email}\nTo: ${message.to || profile.email}\nSubject: ${message.subject}\n\n${message.body}`,
-          attachments: message.attachments,
-        }),
-      );
-    else
-      dispatch(
-        composeOpened({
-          to: replyRecipients(message, profile.email, mode === "replyAll"),
-          subject: /^re:/i.test(message.subject)
-            ? message.subject
-            : `Re: ${message.subject}`,
-          body: `${signature}\n\nOn ${new Date(message.date).toLocaleDateString()}, ${message.sender} wrote:\n> ${message.body.replace(/\n/g, "\n> ")}`,
-        }),
-      );
-  }
-  if (!validFolder)
-    return (
-      <div className="m-auto p-8 text-center">
-        <h1 className="text-xl font-semibold">Folder not found</h1>
-        <Link className="btn-primary mt-5" to="/mail/Inbox">
-          Back to inbox
-        </Link>
-      </div>
-    );
-  const actionIds = selectedIds.length
-    ? selectedIds
-    : active
-      ? [active.id]
-      : [];
+  const ids = selected.length ? selected : active ? [active.id] : [];
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/70 bg-white px-4 py-2">
+      <div className="flex flex-wrap gap-3 border-b p-3 text-xs">
         <button
-          aria-pressed={attachments}
-          onClick={() => {
-            setAttachments(!attachments);
-            setPage(1);
-            setSelected([]);
-          }}
-          className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${attachments ? "bg-brand-50 text-brand-600" : "text-slate-500 hover:bg-slate-50"}`}
+          className="btn-secondary"
+          disabled={busy}
+          onClick={() => setVersion((v) => v + 1)}
         >
-          <Paperclip size={14} />
-          Has attachment
+          Refresh mailbox
         </button>
-        <div className="h-4 border-l border-slate-200" />
-        <FolderInput size={15} className="text-slate-400" />
+        <label>
+          <input
+            type="checkbox"
+            checked={attachments}
+            onChange={(e) => {
+              setAttachments(e.target.checked);
+              setPage(1);
+            }}
+          />{" "}
+          Has attachment
+        </label>
         <select
           aria-label="Move messages to folder"
-          disabled={!actionIds.length}
           value=""
-          onChange={(event) => action(event.target.value, actionIds)}
-          className="max-w-36 rounded-md bg-transparent p-1 text-xs text-slate-500 disabled:opacity-40"
+          disabled={busy || !ids.length}
+          onChange={(e) => perform("move", ids, { folderId: e.target.value })}
         >
-          <option value="" disabled>
-            Move to…
-          </option>
-          {["Inbox", "Archive", ...customFolders, "Spam", "Trash"].map(
-            (name) => (
-              <option key={name}>{name}</option>
-            ),
-          )}
+          <option value="">Move to…</option>
+          {mail.folders
+            .filter((f) => f.kind !== "drafts")
+            .map((f) => (
+              <option key={f.id} value={f.id}>
+                {folderName(f)}
+              </option>
+            ))}
         </select>
         <select
           aria-label="Apply label to messages"
-          disabled={!actionIds.length}
           value=""
-          onChange={(event) => {
-            dispatch(
-              updateMessages({
-                ids: actionIds,
-                changes: {
-                  label:
-                    event.target.value === "__none" ? "" : event.target.value,
-                },
-              }),
-            );
-            dispatch(notify({ text: "Labels updated.", undo: true }));
-            setSelected([]);
-          }}
-          className="max-w-32 rounded-md bg-transparent p-1 text-xs text-slate-500 disabled:opacity-40"
+          disabled={busy || !ids.length}
+          onChange={(e) =>
+            perform("addLabels", ids, { labelIds: [e.target.value] })
+          }
         >
-          <option value="" disabled>
-            Label…
-          </option>
-          <option value="__none">Remove label</option>
-          {labels.map((label) => (
-            <option key={label.name}>{label.name}</option>
+          <option value="">Add label…</option>
+          {mail.labels.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
           ))}
         </select>
         <button
-          disabled={!actionIds.length}
-          onClick={() =>
-            action(folder === "Spam" ? "Inbox" : "Spam", actionIds)
-          }
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-50"
+          disabled={busy || !ids.length}
+          onClick={() => action(folder === "Spam" ? "Inbox" : "Spam", ids)}
         >
-          <ShieldAlert size={14} />
           {folder === "Spam" ? "Not spam" : "Spam"}
         </button>
-        {folder === "Trash" && (
-          <button
-            disabled={!messages.some((m) => m.folder === "Trash")}
-            onClick={() =>
-              action(
-                "delete",
-                actionIds.length
-                  ? actionIds
-                  : messages
-                      .filter((m) => m.folder === "Trash")
-                      .map((m) => m.id),
-              )
-            }
-            className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-          >
-            <Trash2 size={14} />
-            {actionIds.length ? "Delete forever" : "Empty trash"}
-          </button>
+        {["Trash", "Spam"].includes(folder) && (
+          <>
+            <button
+              disabled={busy || !ids.length}
+              onClick={() => action("delete", ids)}
+            >
+              Delete forever
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => setConfirm({ action: "empty", ids: [] })}
+            >
+              Empty {folder.toLowerCase()}
+            </button>
+          </>
         )}
       </div>
-      <div className="mailbox-layout relative flex min-h-0 flex-1 overflow-hidden">
+      {error && (
+        <p role="alert" className="p-3 text-red-600">
+          {error}
+        </p>
+      )}
+      {busy && (
+        <p role="status" className="px-3 text-xs">
+          Updating mailbox…
+        </p>
+      )}
+      <div
+        className="mailbox-layout relative flex min-h-0 flex-1 overflow-hidden"
+        inert={busy || undefined}
+      >
         <MailList
-          messages={visible}
-          total={filtered.length}
+          messages={messages}
+          total={result.total}
           folder={folder.replace(/^label:/, "")}
           filter={filter}
           setFilter={(value) => {
             setFilter(value);
             setPage(1);
-            setSelected([]);
-            close();
           }}
-          activeId={activeId}
+          activeId={active?.id}
           onOpen={open}
-          selected={selectedIds}
+          selected={selected}
           onSelect={(id) =>
-            setSelected((previous) =>
-              previous.includes(id)
-                ? previous.filter((value) => value !== id)
-                : [...previous, id],
+            setSelected((old) =>
+              old.includes(id) ? old.filter((v) => v !== id) : [...old, id],
             )
           }
           onSelectAll={() =>
             setSelected(
-              visible.every((m) => selectedIds.includes(m.id))
-                ? selectedIds.filter((id) => !visible.some((m) => m.id === id))
-                : [...new Set([...selectedIds, ...visible.map((m) => m.id)])],
+              selected.length === messages.length
+                ? []
+                : messages.map((m) => m.id),
             )
           }
-          onStar={(id) => dispatch(toggleStar(id))}
+          onStar={(id) => {
+            const m = messages.find((m) => m.id === id);
+            perform(m.starred ? "unstar" : "star", [id]);
+          }}
           onAction={action}
           compact={settings.compact}
           sort={sort}
@@ -290,44 +316,37 @@ function Mailbox({ folder, params, setParams }) {
             setSort(sort === "newest" ? "oldest" : "newest");
             setPage(1);
           }}
-          page={currentPage}
+          page={page}
           pageSize={settings.pageSize}
-          setPage={(value) => {
-            setPage(value);
-            setSelected([]);
-          }}
-          pageCount={pageCount}
-          reading={Boolean(active)}
+          setPage={setPage}
+          pageCount={result.totalPages}
+          reading={!!active}
         />
         <MessageView
           message={active}
-          onClose={close}
+          onClose={() => setActive(null)}
           onAction={action}
-          onStar={(id) => dispatch(toggleStar(id))}
+          onStar={(id) => perform(active.starred ? "unstar" : "star", [id])}
           onCompose={compose}
-          onLabel={(id, label) => {
-            dispatch(updateMessages({ ids: [id], changes: { label } }));
-            dispatch(notify({ text: "Label updated.", undo: true }));
+          onLabel={(id, name) => {
+            const label = mail.labels.find((l) => l.name === name);
+            if (label) perform("addLabels", [id], { labelIds: [label.id] });
+            else if (active.labelIds.length)
+              perform("removeLabels", [id], { labelIds: active.labelIds });
           }}
         />
       </div>
       {confirm && (
         <ConfirmDialog
-          title={
-            confirm.type === "delete"
-              ? "Permanently delete messages?"
-              : "Move messages to Trash?"
-          }
+          title="Confirm mailbox change"
           description={
-            confirm.type === "delete"
-              ? `${confirm.ids.length} message(s) and their attachments will be permanently removed. This cannot be undone.`
-              : `${confirm.ids.length} message(s) will move to Trash. You can restore them later.`
+            confirm.action === "trash"
+              ? "Move these messages to Trash?"
+              : "Permanently delete these messages and attachments? This cannot be undone."
           }
-          confirmLabel={
-            confirm.type === "delete" ? "Delete forever" : "Move to Trash"
-          }
+          confirmLabel="Confirm"
           onClose={() => setConfirm(null)}
-          onConfirm={() => perform(confirm.type, confirm.ids)}
+          onConfirm={() => perform(confirm.action, confirm.ids, confirm.extra)}
         />
       )}
     </>

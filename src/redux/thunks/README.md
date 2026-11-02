@@ -1,7 +1,36 @@
-# Future async workflows
+# Async workflows
 
-No network thunks run in this demo. Add createAsyncThunk modules here when real endpoints are available, organized by domain: auth, mail, profile, workspace.
+Every UI-triggered API operation is dispatched through Redux Toolkit `createAsyncThunk`. Endpoint paths and Axios calls belong in `src/api`, not components or reducers.
 
-Call adapters in src/api from thunks, never from reducers. Add pending/fulfilled/rejected handling, request status, and error fields to the relevant slice. Dispatch existing mutation actions only on success, or implement explicit optimistic rollback. Replace synchronous UI dispatches with your thunks at the component boundary.
+| Module               | Responsibility                                                                  |
+| -------------------- | ------------------------------------------------------------------------------- |
+| `authThunks.js`      | Login, cookie restoration, logout, password recovery/change                     |
+| `mailThunks.js`      | Mail queries, organization, bulk actions, drafts, uploads, sending, suggestions |
+| `workspaceThunks.js` | Contact/task/note/event lists and CRUD                                          |
+| `profileThunks.js`   | Profile, avatar, preferences and signature                                      |
+| `adminThunks.js`     | User/alias/domain management, inbound log, contact sync                         |
+| `createApiThunk.js`  | Serializable errors and rejecting responses from a previous session             |
 
-See docs/API_INTEGRATION.md for models, operations, and migration notes.
+## Component pattern
+
+```js
+try {
+  const result = await dispatch(
+    saveWorkspaceItem({ collection: "notes", item: form }),
+  ).unwrap();
+  // Close the editor only after the server confirms the operation.
+  onSaved(result.item);
+} catch (error) {
+  setError(error.message);
+}
+```
+
+Redux Toolkit resolves the dispatch promise to an action even on failure. Use `.unwrap()` when a component must stop on failure. Avoid checking the dispatch result against `false`, and do not manually dispatch a second success action.
+
+Slices handle `pending`, `fulfilled` and `rejected`. `trackRequests` records independent status/error/request IDs under each slice's `requests`. Data reducers only commit confirmed payloads. Workspace list request IDs prevent an old response from replacing a newer save.
+
+`createApiThunk` converts errors into `{message,status,details}` and rejects stale responses after the root session generation changes. It does not put Axios responses, passwords, tokens or file bytes into Redux state. File/credential inputs can be thunk arguments; DevTools redacts sensitive action arguments and is disabled in production.
+
+Message-list effects abort their dispatch promises on cleanup. The thunk's AbortSignal reaches Axios. Draft autosave remains serialized inside the editor so upload, save and send cannot overtake each other.
+
+For another endpoint: add an API adapter, define a named domain thunk, update the slice if the response is shared state, dispatch it from the UI, and cover success and failure with a test. See [architecture](../../../docs/ARCHITECTURE.md).

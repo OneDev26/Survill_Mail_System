@@ -1,7 +1,7 @@
 import { createSlice } from "@reduxjs/toolkit";
 const slice = createSlice({
   name: "ui",
-  initialState: { compose: null, notification: null, storageError: false },
+  initialState: { compose: null, notification: null },
   reducers: {
     composeOpened: {
       prepare(value = {}) {
@@ -25,16 +25,8 @@ const slice = createSlice({
     notificationDismissed(state) {
       state.notification = null;
     },
-    storageFailed(state) {
-      state.storageError = true;
-    },
   },
 });
-export const {
-  composeOpened,
-  composeClosed,
-  notify,
-  notificationDismissed,
-  storageFailed,
-} = slice.actions;
+export const { composeOpened, composeClosed, notify, notificationDismissed } =
+  slice.actions;
 export default slice.reducer;

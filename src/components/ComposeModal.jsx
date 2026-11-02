@@ -1,378 +1,296 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Paperclip, Save, Send, Trash2, X } from "lucide-react";
+import {
+  createDraft,
+  saveDraft,
+  sendDraft,
+  discardDraft,
+  uploadAttachments,
+  removeAttachment,
+  suggestRecipients,
+  fetchFolders,
+} from "../redux/thunks/mailThunks";
+import { composeClosed, notify } from "../redux/slice/uiSlice";
+import { mailboxInvalidated } from "../redux/slice/mailSlice";
 import Dialog from "./Dialog";
 import ConfirmDialog from "./ConfirmDialog";
-import { IconButton } from "./Ui";
-import { saveMessage } from "../redux/slice/mailSlice";
-import { initials } from "../utils/mail";
 
-function messageFrom(form, attachments, initial, profile, folder) {
-  const date = new Date();
-  return {
-    ...initial,
-    ...form,
-    attachments,
-    sender: "Me",
-    email: profile.email,
-    initials: initials(profile.name),
-    color: "violet",
-    subject: form.subject.trim() || "(No subject)",
-    preview: form.body.replace(/\s+/g, " ").slice(0, 140),
-    folder,
-    label: initial.label || "",
-    unread: false,
-    starred: initial.starred || false,
-    date: date.toISOString(),
-    time: date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  };
-}
-
-export default function ComposeModal({ initial, onSave, onClose, onDiscard }) {
-  const profile = useSelector((state) => state.profile);
-  const settings = useSelector((state) => state.settings);
-  const contacts = useSelector((state) => state.workspace.contacts);
-  const storageError = useSelector((state) => state.ui.storageError);
+export default function ComposeModal({ initial }) {
+  const settings = useSelector((s) => s.settings);
+  const user = useSelector((s) => s.auth.session);
   const dispatch = useDispatch();
-  const [form, setForm] = useState(() => ({
+  const [form, setForm] = useState({
     to: initial.to || "",
     cc: initial.cc || "",
     bcc: initial.bcc || "",
     subject: initial.subject || "",
-    body:
-      initial.body ??
-      (settings.useSignature ? `\n\n${settings.signature}` : ""),
-  }));
+    text: initial.body ?? (settings.useSignature ? settings.signature : ""),
+    fromAddress: initial.isDraft ? initial.email || user.email : user.email,
+  });
   const [attachments, setAttachments] = useState(initial.attachments || []);
-  const [copies, setCopies] = useState(Boolean(initial.cc || initial.bcc));
+  const [suggestions, setSuggestions] = useState([]);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [touched, setTouched] = useState(false);
-  const [savedAt, setSavedAt] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [discard, setDiscard] = useState(false);
-  const [drag, setDrag] = useState(false);
-  const fileRef = useRef(null);
-  const formRef = useRef(null);
-  function update(event) {
-    setTouched(true);
-    setSavedAt("");
-    setForm({ ...form, [event.target.name]: event.target.value });
-  }
-  useEffect(() => {
-    if (!touched || loading) return;
-    const timer = setTimeout(() => {
-      dispatch(
-        saveMessage(messageFrom(form, attachments, initial, profile, "Drafts")),
-      );
-      setSavedAt(
-        new Date().toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-      );
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [form, attachments, initial, profile, touched, loading, dispatch]);
-  useEffect(() => {
-    if (!touched || savedAt) return;
-    const handler = (event) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [touched, savedAt]);
-  function save(folder) {
-    if (loading) return;
-    if (folder === "Sent") {
-      const valid = (value) =>
-        value
-          .split(",")
-          .every((address) =>
-            /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(address.trim()),
-          );
-      if (
-        !valid(form.to) ||
-        (form.cc && !valid(form.cc)) ||
-        (form.bcc && !valid(form.bcc))
-      ) {
-        setCopies(true);
-        setError(
-          "Enter valid email addresses in To, Cc, and Bcc, separated by commas.",
-        );
-        return;
-      }
-    }
-    if (folder === "Sent" && (!form.subject.trim() || !form.body.trim())) {
-      setError("Please add a subject and message.");
-      return;
-    }
-    onSave(messageFrom(form, attachments, initial, profile, folder));
-  }
-  async function attach(files) {
-    if (loading || !files.length) return;
-    const existingBytes = attachments.reduce(
-      (sum, file) => sum + (file.bytes || file.content?.length || 0),
-      0,
+  const draft = useRef(initial.isDraft ? initial.id : null);
+  const queue = useRef(Promise.resolve());
+  const finished = useRef(false);
+  const latest = useRef(form);
+  const enqueue = (fn) => {
+    const result = queue.current.catch(() => {}).then(fn);
+    queue.current = result;
+    return result;
+  };
+  const save = async (body) => {
+    if (finished.current) return;
+    const payload = { ...body, html: "" };
+    const result = draft.current
+      ? await dispatch(saveDraft({ id: draft.current, body: payload })).unwrap()
+      : await dispatch(
+          createDraft({
+            ...payload,
+            replyToMessageId: initial.replyToMessageId,
+            forwardOfMessageId: initial.forwardOfMessageId,
+          }),
+        ).unwrap();
+    draft.current = result.message.id;
+    setAttachments(
+      result.message.attachments.map((a) => ({ ...a, name: a.filename })),
     );
-    if (
-      files.reduce((sum, file) => sum + file.size, 0) + existingBytes >
-      1024 * 1024
-    ) {
-      setError("Keep attachments under 1 MB in total for this browser demo.");
-      return;
-    }
-    setLoading(true);
+    setStatus("Draft saved.");
+    return result;
+  };
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+  useEffect(() => {
+    if (!dirty || busy) return;
+    const timer = setTimeout(() => {
+      enqueue(() => saveRef.current(form)).catch((err) => {
+        setError(err.message);
+        setStatus("Draft not saved. Retry Save draft.");
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [form, dirty, busy]);
+  useEffect(() => {
+    let active = true;
+    const q = form.to.split(/[,;]/).at(-1).trim();
+    const timer = setTimeout(() => {
+      if (q)
+        dispatch(suggestRecipients(q.slice(0, 100)))
+          .unwrap()
+          .then((r) => {
+            if (active) setSuggestions(r.items);
+          })
+          .catch(() => {});
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [form.to, dispatch]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+  function update(e) {
+    const next = { ...form, [e.target.name]: e.target.value };
+    latest.current = next;
+    setForm(next);
+    setDirty(true);
+    setStatus("");
+  }
+  async function run(fn) {
+    if (busy) return;
+    setBusy(true);
     setError("");
     try {
-      const added = await Promise.all(
-        files.map(
-          (file) =>
-            new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () =>
-                resolve({
-                  name: file.name,
-                  size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-                  bytes: file.size,
-                  dataUrl: reader.result,
-                });
-              reader.onerror = () =>
-                reject(
-                  new Error("Unable to read this file. Please try again."),
-                );
-              reader.readAsDataURL(file);
-            }),
-        ),
-      );
-      setAttachments((previous) => [...previous, ...added]);
-      setTouched(true);
-      setSavedAt("");
+      await enqueue(fn);
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
-  function close() {
-    if (!loading) {
-      if (
-        touched ||
-        initial.folder === "Drafts" ||
-        initial.to ||
-        initial.subject
-      )
-        save("Drafts");
-      else onClose();
-    }
+  async function close() {
+    await run(async () => {
+      await save(latest.current);
+      finished.current = true;
+      dispatch(composeClosed());
+      dispatch(mailboxInvalidated());
+      await dispatch(fetchFolders()).unwrap();
+    });
+  }
+  async function send(event) {
+    event.preventDefault();
+    await run(async () => {
+      await save(latest.current);
+      await dispatch(sendDraft(draft.current)).unwrap();
+      finished.current = true;
+      dispatch(composeClosed());
+      dispatch(mailboxInvalidated());
+      dispatch(notify({ text: "Message sent." }));
+      await dispatch(fetchFolders()).unwrap();
+    });
   }
   return (
     <>
       <Dialog
         wide
-        title={initial.folder === "Drafts" ? "Edit draft" : "New message"}
+        title={initial.isDraft ? "Edit draft" : "New message"}
         onClose={close}
       >
         <form
-          ref={formRef}
-          onSubmit={(event) => {
-            event.preventDefault();
-            save("Sent");
-          }}
-          onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-              event.preventDefault();
-              formRef.current.requestSubmit();
+          className="space-y-4 p-6"
+          onSubmit={send}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.requestSubmit();
             }
           }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget))
-              setDrag(false);
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDrag(false);
-            attach(Array.from(event.dataTransfer.files));
-          }}
-          className={drag ? "bg-brand-50 ring-2 ring-inset ring-brand-500" : ""}
         >
-          <div className="px-6">
-            <div className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs">
-              <span className="w-12 text-slate-400">From</span>
-              <span className="truncate">
-                {profile.name} &lt;{profile.email}&gt;
-              </span>
-            </div>
-            <div className="flex items-center gap-2 border-b border-slate-100">
-              <label className="flex flex-1 items-center gap-4 py-3 text-xs">
-                <span className="w-12 text-slate-400">To</span>
+          <fieldset disabled={busy} className="space-y-3">
+            <label className="block">
+              From
+              <select
+                className="field"
+                name="fromAddress"
+                value={form.fromAddress}
+                onChange={update}
+              >
+                {[
+                  user.email,
+                  ...(user.aliases || [])
+                    .filter((a) => a.canSend)
+                    .map((a) => a.email),
+                ].map((email) => (
+                  <option key={email}>{email}</option>
+                ))}
+              </select>
+            </label>
+            {[
+              ["to", "Recipients"],
+              ["cc", "Cc recipients"],
+              ["bcc", "Bcc recipients"],
+              ["subject", "Subject"],
+            ].map(([key, label]) => (
+              <label className="block" key={key}>
+                {label}
                 <input
-                  autoFocus
-                  name="to"
-                  required
-                  type="email"
-                  multiple
-                  list="compose-contacts"
-                  aria-label="Recipients"
-                  value={form.to}
+                  className="field"
+                  name={key}
+                  aria-label={label}
+                  list={key === "subject" ? undefined : "live-recipients"}
+                  value={form[key]}
                   onChange={update}
-                  placeholder="name@example.com"
-                  className="min-w-0 flex-1 bg-transparent py-1 outline-none"
+                  maxLength={key === "subject" ? 998 : undefined}
                 />
               </label>
-              <button
-                type="button"
-                aria-expanded={copies}
-                onClick={() => setCopies(!copies)}
-                className="text-xs text-brand-600"
-              >
-                Cc / Bcc
-              </button>
-            </div>
-            {copies &&
-              ["cc", "bcc"].map((name) => (
-                <label
-                  key={name}
-                  className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs"
-                >
-                  <span className="w-12 capitalize text-slate-400">{name}</span>
-                  <input
-                    aria-label={
-                      name === "cc" ? "Cc recipients" : "Bcc recipients"
-                    }
-                    name={name}
-                    type="email"
-                    multiple
-                    list="compose-contacts"
-                    value={form[name]}
-                    onChange={update}
-                    className="min-w-0 flex-1 bg-transparent py-1 outline-none"
-                  />
-                </label>
-              ))}
-            <datalist id="compose-contacts">
-              {contacts.map((contact) => (
-                <option key={contact.id} value={contact.email}>
-                  {contact.name}
+            ))}
+            <datalist id="live-recipients">
+              {suggestions.map((s) => (
+                <option key={s.email} value={s.email}>
+                  {s.displayName}
                 </option>
               ))}
             </datalist>
-            <label className="flex items-center gap-4 border-b border-slate-100 py-3 text-xs">
-              <span className="w-12 text-slate-400">Subject</span>
+            <textarea
+              className="field min-h-60"
+              name="text"
+              aria-label="Message body"
+              value={form.text}
+              onChange={update}
+            />
+            {attachments.map((a) => (
+              <div key={a.id} className="flex gap-3 text-xs">
+                <span>{a.filename || a.name}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    run(async () => {
+                      const r = await dispatch(
+                        removeAttachment({
+                          id: draft.current,
+                          attachmentId: a.id,
+                        }),
+                      ).unwrap();
+                      setAttachments(r.message.attachments);
+                    })
+                  }
+                >
+                  Remove {a.filename || a.name}
+                </button>
+              </div>
+            ))}
+            <label className="block text-sm">
+              Attach files
               <input
-                name="subject"
-                required
-                maxLength={300}
-                value={form.subject}
-                onChange={update}
-                placeholder="Add a subject"
-                className="min-w-0 flex-1 bg-transparent py-1 outline-none"
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const files = [...e.target.files];
+                  e.target.value = "";
+                  if (!files.length) return;
+                  run(async () => {
+                    await save(latest.current);
+                    const r = await dispatch(
+                      uploadAttachments({ id: draft.current, files: files }),
+                    ).unwrap();
+                    setAttachments(r.message.attachments);
+                  });
+                }}
               />
             </label>
-            <textarea
-              name="body"
-              aria-label="Message body"
-              required
-              value={form.body}
-              onChange={update}
-              placeholder="Write something thoughtful…"
-              className="min-h-60 w-full resize-y bg-transparent py-5 text-sm leading-7 outline-none"
-            />
-            {attachments.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {attachments.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex max-w-full items-center gap-2 rounded-md bg-slate-100 pl-3 text-[11px]"
-                  >
-                    <Paperclip size={12} />
-                    <span className="truncate">{file.name}</span>
-                    <IconButton
-                      icon={X}
-                      label={`Remove ${file.name}`}
-                      disabled={loading}
-                      onClick={() => {
-                        setAttachments(
-                          attachments.filter((_, item) => item !== index),
-                        );
-                        setTouched(true);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            {error && (
-              <p role="alert" className="mb-3 text-xs text-red-600">
-                {error}
-              </p>
-            )}
-            <p className="mb-3 text-[10px] text-slate-400">
-              {loading
-                ? "Reading attachments…"
-                : storageError
-                  ? "Draft is in memory only. Browser storage is unavailable."
-                  : savedAt
-                    ? `Draft saved at ${savedAt}`
-                    : "Separate recipients with commas · Drop files to attach"}
+            <div className="flex gap-3">
+              <button className="btn-primary">Send</button>
+              <button className="btn-secondary" type="button" onClick={close}>
+                Save draft
+              </button>
+              <button
+                className="btn-secondary"
+                type="button"
+                onClick={() => setDiscard(true)}
+              >
+                Discard
+              </button>
+            </div>
+          </fieldset>
+          {error && (
+            <p role="alert" className="text-red-600">
+              {error}
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-6 py-4">
-            <button disabled={loading} type="submit" className="btn-primary">
-              <Send size={15} />
-              Send
-            </button>
-            <IconButton
-              icon={Paperclip}
-              label="Attach files"
-              disabled={loading}
-              onClick={() => fileRef.current.click()}
-            />
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              onChange={(event) => {
-                attach(Array.from(event.target.files));
-                event.target.value = "";
-              }}
-              className="hidden"
-            />
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => save("Drafts")}
-              className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-500 hover:bg-slate-100"
-            >
-              <Save size={15} />
-              Save draft
-            </button>
-            <IconButton
-              icon={Trash2}
-              label="Discard draft"
-              disabled={loading}
-              onClick={() => setDiscard(true)}
-            />
-            <span className="ml-auto text-[10px] text-slate-400">
-              Demo · no email is delivered
-            </span>
-          </div>
+          )}
+          <p role="status" className="text-xs">
+            {busy ? "Saving…" : status}
+          </p>
         </form>
       </Dialog>
       {discard && (
         <ConfirmDialog
-          title="Discard this draft?"
-          description="This message and its attachments will be removed from Drafts."
-          confirmLabel="Discard draft"
+          title="Discard draft?"
+          description="The draft and its attachments will be permanently deleted."
+          confirmLabel="Discard"
           onClose={() => setDiscard(false)}
-          onConfirm={onDiscard}
+          onConfirm={() =>
+            run(async () => {
+              if (draft.current)
+                await dispatch(discardDraft(draft.current)).unwrap();
+              finished.current = true;
+              dispatch(composeClosed());
+              dispatch(mailboxInvalidated());
+              await dispatch(fetchFolders()).unwrap();
+            })
+          }
         />
       )}
     </>

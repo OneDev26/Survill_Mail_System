@@ -1,50 +1,58 @@
-# API integration
+# Survill Mail API integration
 
-This is a single-account local demo. Redux owns domain data; browser storage is the persistence adapter. Demo login is a navigation gate, not a production security boundary. No mail server is contacted.
+Reviewed 31 October 2026 against the supplied HTML reference and backend source. All **69 registered method/path combinations** appear in the reference; no missing or stale routes were found in that comparison. Route coverage does not prove deployment health or backend correctness.
 
-## State ownership
+## Setup
 
-| Slice | Owns | Persistence |
-| --- | --- | --- |
-| auth | Session and remember-me selection | localStorage or sessionStorage |
-| profile | Name, avatar, job, company, phone, location, bio | localStorage |
-| mail | Messages, folders, labels, one reversible operation | localStorage; undo excluded |
-| settings | Density, page size, read behavior, signature, confirmations | localStorage |
-| workspace | Contacts, tasks, notes, events | localStorage |
-| ui | Compose descriptor, notifications, storage warning | Memory |
+Copy `.env.example` to `.env`:
 
-Store hydration and persistence live in src/redux/store.js. Domain reducers live in src/redux/slice. Storage access is isolated in src/api/storage.js. Valid v1 demo mail is imported on first v2 use. Native File objects never enter Redux; attachment metadata and data URLs are serializable.
+```dotenv
+VITE_API_BASE_URL=http://localhost:4000
+```
 
-## Connecting a backend
+Use an origin without `/api`; the reference names `https://mailapi.survill.com` for deployment. Restart Vite after environment changes. Start the backend/PostgreSQL separately and provision an account through backend administration. CORS must allow the exact frontend origin. Keep the frontend and API on same-site hosts for the documented SameSite=Lax refresh cookie; localhost and 127.0.0.1 are different hosts.
 
-1. Configure VITE_API_BASE_URL. Implement domain adapters using src/api/client.js. Keep endpoint paths out of components.
-2. Replace authService.login, remove the demo credentials, and validate sessions with your backend before rendering protected pages. Implement real logout and password recovery using the backend's authentication policy.
-3. Add createAsyncThunk modules under src/redux/thunks. Add request status and error fields with pending/fulfilled/rejected reducers. Keep draft form fields separate from request status.
-4. Replace synchronous UI mutation dispatches with thunks. Commit success responses to slices; retain form input and show actionable feedback on failure. Use rollback for optimistic operations.
-5. Move pagination/search to server queries when necessary. Debounce search, cancel obsolete requests, and guard against stale responses.
-6. Upload attachments separately and retain server IDs/download URLs. Replace demo data URLs and the local 1 MB limit. Make draft autosave debounced and concurrency-safe.
-7. Scope cached state by authenticated account and clear it appropriately on real logout/account switching. Add session-expiry and cross-tab handling.
-8. Implement Undo using compensating server mutations. Use idempotency keys for sending and retry only safe operations. Keep destructive confirmations.
+There is no alternative local-data mode, sample login or public registration flow.
 
-## Models
+## Implementation map
 
-- Message: id, sender, email, to, cc, bcc, subject, body, preview, folder, label, unread, starred, initials, color, date (ISO), time (display), attachments[]. Recipient strings are comma-separated; convert them to arrays in adapters. Fields such as cc/bcc may be absent on old demo data.
-- Attachment: name, size (display), bytes, dataUrl OR content. Replace binary data with server attachment IDs and authorized download URLs. Never reveal Bcc on received messages.
-- Contact: id, name, email, phone, company.
-- Task: id, title, done, due (YYYY-MM-DD or empty).
-- Note: id, title, body.
-- Event: id, title, date (YYYY-MM-DD), time/endTime (HH:mm local same-day time), location, description. Add timezone/recurrence support according to your backend.
-- Label: name, dot/badge Tailwind classes. Use stable IDs and color tokens in production, mapping colors to classes in the UI. Custom folders also need stable server IDs.
+| Layer                                         | Location                                         |
+| --------------------------------------------- | ------------------------------------------------ |
+| HTTP, credentials, token rotation             | `src/api/client.js`                              |
+| Named adapters for 68 JSON/multipart routes   | `src/api/backend.js`                             |
+| DTO/display/form conversion                   | `src/api/models.js`                              |
+| Async domain operations                       | `src/redux/thunks/`                              |
+| Confirmed data and request lifecycle reducers | `src/redux/slice/`                               |
+| Root reset and store                          | `src/redux/rootReducer.js`, `src/redux/store.js` |
+| Session bootstrap                             | `src/components/SessionGate.jsx`                 |
 
-## Suggested operations
+The 69th route serves signed files. The frontend follows returned URLs rather than reconstructing tokens or attaching an API bearer token. All UI API operations dispatch async thunks; components do not call Axios/adapters directly. See [architecture](ARCHITECTURE.md).
 
-| Domain | Operations to implement |
-| --- | --- |
-| Auth | login, getSession, logout, requestPasswordReset |
-| Mail | list, get, saveDraft, send, updateFlags, move, delete, restore |
-| Attachments | upload, download, remove |
-| Folders/labels | list, create, update, delete |
-| Profile/settings | get, update |
-| Workspace | list/create/update/delete contacts, tasks, notes, events |
+## Connected workflows
 
-These are proposed contracts, not implemented endpoints. Retain the Playwright workflow tests as adapters change and add network failure/loading and API integration coverage.
+- Authentication: login with remember flag, refresh-cookie restoration, logout, logout-all, forgot/reset/change password. Tokens stay in memory; the HttpOnly cookie restores sessions.
+- Mail: server search/filter/pagination, full detail reads with configurable mark-read, archive/spam/trash/restore/move, read/star flags, labels, undo, confirmed permanent deletion and empty Trash/Spam.
+- Compose: one server-created draft, serialized autosave, multipart `files` upload, attachment removal, send-enabled aliases, recipient suggestions, reply/forward source IDs, send and discard. Failed sends keep the draft/editor.
+- Workspace: contact/task/note/event CRUD. Contacts load all available pages; other collections are capped at 1,000 by the backend. Read-only/company-contact controls reflect permissions. Tasks map `done/due` to `completed/dueDate`; event inputs convert local times to ISO instants and preserve cross-day end dates.
+- Profile/settings: permitted display-name updates, recovery email, multipart `avatar` upload/removal, password changes, preferences and escaped text signatures.
+- Administration: users, shared aliases, known company domains, inbound processing log, Zoho sync status/run. Unsupported sections report unavailable and contain no local substitutes.
+
+## Contract details and UI limits
+
+Bearer tokens authenticate protected APIs; refresh cookies alone do not. Requests include credentials. Multipart boundaries are browser-generated. DELETE/204 responses have no JSON body. Rate-limit text errors and JSON validation errors are displayed without assuming every failure is JSON.
+
+Sender display uses resolved `displayName`, never untrusted `headerName`. Message HTML is displayed in an empty-sandbox iframe; remote images may load. Attachment clicks obtain fresh signed URLs. Compose is plain text: editing a rich HTML draft replaces its HTML with the edited text.
+
+Bulk undo returns the server payload unchanged. Label operations do not advertise undo because the documented inverse is not a precise snapshot. Multiple label IDs remain intact; the reading pane displays the first label, with add-label and remove-all-label controls. Label UI styling currently uses a common violet style.
+
+Preferences and `signatureHtml` are separate requests; a failure can leave a partial save requiring retry. Known domains resolve identities and are not hosted-domain/DNS provisioning. Inbound logs are not organization-wide mailbox monitoring. Primary email changes and user deletion are not available in the documented user API.
+
+The API adapters also expose health, current-user/profile reads, replace-preferences PUT, folder rename, label rename/color, threads, original .eml links, direct one-shot sending and batch identity lookup. These do not all have dedicated UI controls. The frontend-only backlog in [ENDPOINT_GAPS.md](ENDPOINT_GAPS.md) separates such controls from missing endpoints.
+
+## Verification
+
+`npm test` runs browser interactions against intercepted responses, including all 68 adapter request routes and thunk lifecycle/race tests. It does not execute Express/PostgreSQL, provider delivery, production CORS or storage services. Test fixtures exist only under `tests/`.
+
+For real service checks, set `API_URL`, `TEST_EMAIL`, and `TEST_PASSWORD`, then run `npm run test:backend`. On a dedicated account, `npm run test:backend -- --write` creates/updates/cleans temporary contacts, tasks, notes, events, folders, labels and an unsent draft. It never sends mail, triggers sync, or changes user administration. Failed cleanup prints resource paths. Keep credentials out of Vite variables and source control.
+
+[TEST_REPORT.md](TEST_REPORT.md) records checks actually completed and the remaining environment blocker. [ENDPOINT_GAPS.md](ENDPOINT_GAPS.md) is the proposed backend backlog; proposed routes are not called by this application.
