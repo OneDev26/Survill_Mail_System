@@ -215,7 +215,8 @@ export default function MailList({
                   )}
                   <div className="mt-2 flex items-center gap-2">
                     <LabelBadge name={message.label} />
-                    {message.attachments.length > 0 && (
+                    {(message.hasAttachments ||
+                      message.attachments.length > 0) && (
                       <Paperclip size={12} className="text-slate-400" />
                     )}
                     {message.unread && (

@@ -2,19 +2,14 @@ import { useSelector } from "react-redux";
 import { NavLink, Link } from "react-router-dom";
 import {
   Archive,
-  Bell,
   CalendarDays,
   CheckCheck,
-  Clock3,
   FileText,
   Folder,
   Inbox,
-  LayoutTemplate,
   Mail,
-  Newspaper,
   PenLine,
   Send,
-  SendHorizontal,
   Settings,
   ShieldAlert,
   Star,
@@ -24,20 +19,16 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, IconButton } from "./Ui";
-import { belongsToFolder, initials } from "../utils/mail";
+import { initials } from "../utils/mail";
+import { folderName } from "../api/models";
 const folders = [
   ["Inbox", Inbox],
   ["Starred", Star],
   ["Drafts", FileText],
-  ["Outbox", SendHorizontal],
-  ["Snooze", Clock3],
   ["Sent", Send],
   ["Archive", Archive],
   ["Spam", ShieldAlert],
   ["Trash", Trash2],
-  ["Template", LayoutTemplate],
-  ["Notifications", Bell],
-  ["Newsletter", Newspaper],
 ];
 const workspaces = [
   ["contacts", Users],
@@ -46,13 +37,11 @@ const workspaces = [
   ["calendar", CalendarDays],
 ];
 export default function Sidebar({ onCompose, open, onClose }) {
-  const { messages, labels, customFolders } = useSelector(
-    (state) => state.mail,
-  );
+  const { labels, customFolders } = useSelector((state) => state.mail);
   const profile = useSelector((state) => state.profile);
+  const serverMail = useSelector((state) => state.mail);
   const linkClass = ({ isActive }) =>
     `flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] capitalize transition ${isActive ? "bg-brand-100/80 font-semibold text-brand-600" : "text-slate-600 hover:bg-slate-100"}`;
-  const bytes = new Blob([JSON.stringify(messages)]).size;
   return (
     <>
       {open && (
@@ -74,7 +63,8 @@ export default function Sidebar({ onCompose, open, onClose }) {
             <Mail size={23} />
           </span>
           <span className="text-[23px] font-semibold tracking-tight">
-            zoho<span className="ml-1.5 font-normal text-slate-500">mail</span>
+            Survill
+            <span className="ml-1.5 font-normal text-slate-500">mail</span>
           </span>
         </Link>
         {open && (
@@ -95,10 +85,15 @@ export default function Sidebar({ onCompose, open, onClose }) {
           <nav aria-label="Mail folders" className="space-y-0.5">
             {[...folders, ...customFolders.map((name) => [name, Folder])].map(
               ([name, Icon]) => {
-                const count = messages.filter(
-                  (m) =>
-                    belongsToFolder(m, name) && (name !== "Inbox" || m.unread),
-                ).length;
+                const serverFolder = serverMail.folders?.find(
+                  (f) => folderName(f) === name,
+                );
+                const count =
+                  (name === "Starred"
+                    ? serverMail.starredCount
+                    : name === "Inbox"
+                      ? serverFolder?.unread
+                      : serverFolder?.total) || 0;
                 return (
                   <NavLink
                     key={name}
@@ -164,9 +159,8 @@ export default function Sidebar({ onCompose, open, onClose }) {
           </nav>
         </div>
         <div className="px-6 py-3 text-[10px] text-slate-400">
-          <span>LOCAL MAIL DATA</span>
-          <span className="float-right">{(bytes / 1024).toFixed(0)} KB</span>
-          <p className="mt-1.5">Saved in this browser</p>
+          <span>SERVER MAILBOX</span>
+          <p className="mt-1.5">Saved on your mail server</p>
         </div>
         <Link
           to="/profile"
