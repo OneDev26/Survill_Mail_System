@@ -4,18 +4,21 @@ import {
   Archive,
   Bell,
   CalendarDays,
+  ChartNoAxesColumn,
   CheckCheck,
   Clock3,
   FileText,
   Folder,
   Inbox,
   LayoutTemplate,
+  ListFilter,
   Mail,
   Newspaper,
   PenLine,
   Send,
   SendHorizontal,
   Settings,
+  ShieldCheck,
   ShieldAlert,
   Star,
   StickyNote,
@@ -44,6 +47,12 @@ const workspaces = [
   ["tasks", CheckCheck],
   ["notes", StickyNote],
   ["calendar", CalendarDays],
+];
+const tools = [
+  ["Mail Rules", ListFilter, "/admin/routing"],
+  ["Mail Analytics", ChartNoAxesColumn, "/admin/audit"],
+  ["Security", ShieldCheck, "/admin/security"],
+  ["Settings", Settings, "/settings"],
 ];
 export default function Sidebar({ onCompose, open, onClose }) {
   const { messages, labels, customFolders } = useSelector(
@@ -157,10 +166,22 @@ export default function Sidebar({ onCompose, open, onClose }) {
                 {name}
               </NavLink>
             ))}
-            <NavLink to="/settings" onClick={onClose} className={linkClass}>
-              <Settings size={17} />
-              Settings
-            </NavLink>
+          </nav>
+          <div className="mb-2 mt-5 border-t border-slate-200 px-3 pt-5 text-[10px] font-semibold tracking-widest text-slate-400">
+            TOOLS &amp; SETTINGS
+          </div>
+          <nav aria-label="Tools and settings" className="space-y-0.5">
+            {tools.map(([name, Icon, to]) => (
+              <NavLink
+                key={name}
+                to={to}
+                onClick={onClose}
+                className={linkClass}
+              >
+                <Icon size={17} strokeWidth={1.7} />
+                {name}
+              </NavLink>
+            ))}
           </nav>
         </div>
         <div className="px-6 py-3 text-[10px] text-slate-400">
