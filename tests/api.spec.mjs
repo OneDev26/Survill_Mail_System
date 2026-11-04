@@ -79,6 +79,24 @@ async function mockApi(page, options = {}) {
     draft = null,
     authenticated = false,
     expired = false;
+  let groups = [
+    {
+      id: 1,
+      name: "Studio team",
+      email: "team@survill.com",
+      whoCanSend: "organization",
+      delivery: "active",
+      members: [
+        { id: 10, email: "a@survill.com", name: "Alice", canSend: true },
+        { id: 11, email: "b@survill.com", name: "Bob", canSend: false },
+      ],
+    },
+  ];
+  const groupItem = (group) => ({
+    ...group,
+    memberCount: group.members.length,
+    senderCount: group.members.filter((m) => m.canSend).length,
+  });
   const collections = { contacts: [], tasks: [], notes: [], events: [] };
   const session = () => ({
     accessToken: expired ? "rotated-token" : "test-token",
@@ -105,6 +123,62 @@ async function mockApi(page, options = {}) {
     });
     const json = (data, status = 200) => route.fulfill({ status, json: data });
     const empty = () => route.fulfill({ status: 204 });
+    if (path.startsWith("/api/admin/groups")) {
+      if (options.groupFailure && method !== "GET")
+        return json({ error: "Group change rejected" }, 409);
+      if (method === "GET")
+        return json({
+          totalGroups: groups.length,
+          uniqueMembers: new Set(
+            groups.flatMap((g) => g.members.map((m) => m.email)),
+          ).size,
+          activeDelivery: groups.filter((g) => g.delivery === "active").length,
+          restrictedSenders: 0,
+          items: groups.map(groupItem),
+        });
+      if (method === "POST") {
+        const item = { ...body, id: groups.length + 10 };
+        groups.push(item);
+        return json({ item: groupItem(item) }, 201);
+      }
+      const id = Number(path.split("/").at(-1));
+      if (method === "PATCH") {
+        const item = groups.find((g) => g.id === id);
+        Object.assign(item, body);
+        return json({ item: groupItem(item) });
+      }
+      if (method === "DELETE") {
+        groups = groups.filter((g) => g.id !== id);
+        return empty();
+      }
+    }
+    if (
+      ["/api/admin/monitoring", "/api/admin/email-monitoring"].includes(path)
+    ) {
+      if (options.monitoringFailure)
+        return json({ error: "Monitoring unavailable" }, 503);
+      return json({
+        summary: {
+          totalMailCopies: 120,
+          inboxCopies: 80,
+          unreadMessages: 14,
+          withAttachments: 31,
+        },
+        items: [
+          {
+            id: 5001,
+            mailbox: "ops@survill.com",
+            from: "alice@example.com",
+            to: "team@survill.com",
+            subject: "Project update",
+            folder: "inbox",
+            date: "2026-11-04T10:15:00.000Z",
+            unread: true,
+            hasAttachments: false,
+          },
+        ],
+      });
+    }
     if (path === "/api/auth/refresh") {
       if (!authenticated || options.refreshFails)
         return json({ error: "Session expired" }, 401);
@@ -336,6 +410,67 @@ test("authentication, cookie restoration, logout, and no browser persistence", a
   await expect(page.getByText("Fill demo credentials")).toHaveCount(0);
 });
 
+for (const resource of ["folders", "labels"]) {
+  test(`reload keeps authentication when ${resource} fails and retries mailbox loading`, async ({
+    page,
+  }) => {
+    const { calls } = await mockApi(page);
+    await login(page);
+    const intercept = (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: "Temporarily unavailable" },
+      });
+    await page.route(`**/api/${resource}`, intercept);
+    await page.reload();
+    await expect(page.getByRole("alert")).toContainText("You are signed in");
+    await expect(page).toHaveURL(/mail\/Inbox/);
+    await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+    await page.unroute(`**/api/${resource}`, intercept);
+    await page.getByRole("button", { name: "Retry mailbox" }).click();
+    await expect(
+      page.getByRole("button", { name: /Verified Sender/ }),
+    ).toBeVisible();
+    expect(
+      calls.filter((call) => call.path === "/api/auth/login"),
+    ).toHaveLength(1);
+  });
+}
+
+test("reload offers retry for unavailable refresh instead of asking for login", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page);
+  const intercept = (route) =>
+    route.fulfill({ status: 503, json: { error: "Temporarily unavailable" } });
+  await page.route("**/api/auth/refresh", intercept);
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText(
+    "Could not restore your session",
+  );
+  await expect(page).toHaveURL(/mail\/Inbox/);
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
+  await page.unroute("**/api/auth/refresh", intercept);
+  await page.getByRole("button", { name: "Retry connection" }).click();
+  await expect(
+    page.getByRole("button", { name: /Verified Sender/ }),
+  ).toBeVisible();
+});
+
+test("reload requests login when the backend rejects the refresh session", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page);
+  await page.route("**/api/auth/refresh", (route) =>
+    route.fulfill({ status: 401, json: { error: "Session expired" } }),
+  );
+  await page.reload();
+  await expect(page).toHaveURL(/login/);
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+});
+
 test("search and pagination use server parameters; full message opens and bulk undo works", async ({
   page,
 }) => {
@@ -522,21 +657,148 @@ test("expired refresh clears protected state without a retry loop", async ({
   expect(calls.filter((c) => c.path === "/api/auth/refresh")).toHaveLength(2);
 });
 
-test("admin route uses backend users and unsupported features stay unavailable", async ({
+test("admin monitoring uses live summaries, filters and metadata", async ({
   page,
 }) => {
   const { calls } = await mockApi(page, { admin: true });
   await login(page);
-  await page.getByRole("link", { name: "Admin tools", exact: true }).click();
-  await page.getByRole("link", { name: "users", exact: true }).click();
+  await page.goto("/admin/overview");
   await expect(
-    page.getByRole("heading", { name: "Test User", exact: true }),
-  ).toBeVisible();
-  await page.goto("/admin/stores");
+    page.getByRole("region", { name: "Monitoring overview" }),
+  ).toContainText("120");
+  expect(calls.some((c) => c.path === "/api/admin/monitoring")).toBe(true);
+  await page
+    .getByRole("link", { name: "Email monitoring", exact: true })
+    .click();
   await expect(
-    page.getByText("This feature has no endpoint", { exact: false }),
+    page.getByRole("cell", { name: "Project update", exact: true }),
   ).toBeVisible();
-  expect(calls.some((c) => c.path.includes("stores"))).toBe(false);
+  await page.getByLabel("Search monitored mail").fill("invoice");
+  await page.getByLabel("Monitoring folder").selectOption("inbox");
+  await page.getByLabel("Message read state").selectOption("false");
+  await page.getByLabel("Attachment state").selectOption("false");
+  await page.getByLabel("Monitoring limit").selectOption("20");
+  await expect
+    .poll(
+      () =>
+        calls.filter((c) => c.path === "/api/admin/email-monitoring").at(-1)
+          ?.params,
+    )
+    .toEqual({
+      q: "invoice",
+      folder: "inbox",
+      unread: "false",
+      withAttachments: "false",
+      limit: "20",
+    });
+  await page
+    .getByRole("button", {
+      name: "Details for Project update in ops@survill.com",
+    })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("alice@example.com");
+  await expect(page.getByRole("dialog")).toContainText(
+    "Message content and attachment downloads are not available",
+  );
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  expect(calls.some((c) => /messages\/5001|attachments\//.test(c.path))).toBe(
+    false,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("admin groups create edit and delete use the supplied member contract", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/groups");
+  await expect(
+    page.getByRole("button", { name: "Edit Studio team", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create group", exact: true }).click();
+  await page.getByLabel("Group name", { exact: true }).fill("Support team");
+  await page
+    .getByLabel("Group email", { exact: true })
+    .fill("support@survill.com");
+  await page.getByRole("button", { name: "Add member" }).click();
+  await page.getByLabel("Member 1 name").fill("Charlie");
+  await page.getByLabel("Member 1 email").fill("c@survill.com");
+  await page.getByLabel("Member 1 can send").check();
+  await page.getByRole("button", { name: "Save group" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Support team" }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.path === "/api/admin/groups" && c.method === "POST")
+      .body,
+  ).toEqual({
+    name: "Support team",
+    email: "support@survill.com",
+    whoCanSend: "organization",
+    delivery: "active",
+    members: [{ email: "c@survill.com", name: "Charlie", canSend: true }],
+  });
+  await page.getByRole("button", { name: "Edit Support team" }).click();
+  await page.getByLabel("Delivery", { exact: true }).selectOption("paused");
+  await page.getByLabel("Member 1 can send").uncheck();
+  await page.getByRole("button", { name: "Save group" }).click();
+  await expect(
+    page.getByRole("cell", { name: "paused", exact: true }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.method === "PATCH" && c.path === "/api/admin/groups/11")
+      .body.members,
+  ).toEqual([{ email: "c@survill.com", name: "Charlie", canSend: false }]);
+  await page.getByRole("button", { name: "Delete Support team" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Support team" }),
+  ).toHaveCount(0);
+  expect(
+    calls.some(
+      (c) => c.method === "DELETE" && c.path === "/api/admin/groups/11",
+    ),
+  ).toBe(true);
+});
+
+test("admin API failures retain group edits and never show sample monitored mail", async ({
+  page,
+}) => {
+  await mockApi(page, {
+    admin: true,
+    groupFailure: true,
+    monitoringFailure: true,
+  });
+  await login(page);
+  await page.goto("/admin/groups");
+  await page.getByRole("button", { name: "Edit Studio team" }).click();
+  await page.getByLabel("Group name", { exact: true }).fill("Keep my edit");
+  await page.getByRole("button", { name: "Save group" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Group change rejected",
+  );
+  await expect(page.getByLabel("Group name", { exact: true })).toHaveValue(
+    "Keep my edit",
+  );
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Delete Studio team" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Group change rejected",
+  );
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Studio team" }),
+  ).toBeVisible();
+  await page.goto("/admin/monitoring");
+  await expect(page.getByRole("alert")).toContainText("Monitoring unavailable");
+  await expect(page.getByRole("cell")).toHaveCount(0);
 });
 
 test("profile and preferences are sent with documented payloads", async ({
@@ -558,8 +820,8 @@ test("profile and preferences are sent with documented payloads", async ({
     )
     .toBe(true);
   await page
-    .getByRole("navigation", { name: "Workspace" })
-    .getByRole("link", { name: "Settings" })
+    .getByRole("navigation", { name: "Tools and settings" })
+    .getByRole("link", { name: "Settings", exact: true })
     .click();
   await page.getByLabel("Email signature").fill("<script>not markup</script>");
   await page.getByRole("button", { name: "Save preferences" }).click();
@@ -667,6 +929,23 @@ test("API adapter covers every documented JSON/multipart route and preserves wir
     await api.domains();
     await api.saveDomain({ domain: "example.com", name: "Example" });
     await api.deleteDomain(key);
+    await api.groups();
+    await api.createGroup({
+      name: "Team",
+      email: "team@survill.com",
+      whoCanSend: "organization",
+      delivery: "active",
+      members: [],
+    });
+    await api.updateGroup(key, { delivery: "paused", members: [] });
+    await api.deleteGroup(key);
+    await api.monitoring({
+      folder: "inbox",
+      unread: true,
+      withAttachments: true,
+      limit: 25,
+    });
+    await api.emailMonitoring({ q: "invoice", folder: "all", limit: 20 });
     await api.users();
     await api.createUser({
       email: "a@survill.com",

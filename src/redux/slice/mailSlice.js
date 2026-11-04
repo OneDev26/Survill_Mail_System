@@ -1,6 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { folderName, labelModel } from "../../api/models";
-import { login, restoreSession } from "../thunks/authThunks";
 import * as thunks from "../thunks/mailThunks";
 import { trackRequests } from "../requestState";
 
@@ -29,7 +28,7 @@ const slice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    for (const thunk of [login, restoreSession, thunks.fetchFolders]) {
+    for (const thunk of [thunks.fetchFolders]) {
       builder.addCase(thunk.fulfilled, (state, { payload }) =>
         applyFolders(state, payload),
       );

@@ -67,5 +67,11 @@
   "DELETE /api/admin/users/:id/aliases/:email",
   "GET /api/admin/inbound-log",
   "GET /api/admin/zoho-sync",
-  "POST /api/admin/zoho-sync"
+  "POST /api/admin/zoho-sync",
+  "GET /api/admin/groups",
+  "POST /api/admin/groups",
+  "PATCH /api/admin/groups/:id",
+  "DELETE /api/admin/groups/:id",
+  "GET /api/admin/monitoring",
+  "GET /api/admin/email-monitoring"
 ]

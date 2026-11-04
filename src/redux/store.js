@@ -14,7 +14,7 @@ function sanitizeAction(action) {
     return { ...action, meta: { ...action.meta, arg: "[redacted]" } };
   }
   return action;
-}
+} 
 export const store = configureStore({
   reducer: rootReducer,
   devTools: import.meta.env.DEV ? { actionSanitizer: sanitizeAction } : false,

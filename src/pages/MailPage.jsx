@@ -195,26 +195,28 @@ function Mailbox({ folder, query }) {
   const ids = selected.length ? selected : active ? [active.id] : [];
   return (
     <>
-      <div className="flex flex-wrap gap-3 border-b p-3 text-xs">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200/70 p-3 text-xs">
         <button
-          className="btn-secondary"
+          className="btn-secondary h-10 whitespace-nowrap"
           disabled={busy}
           onClick={() => setVersion((v) => v + 1)}
         >
           Refresh mailbox
         </button>
-        <label>
+        <label className="inline-flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap px-2">
           <input
+            className="m-0 size-4 shrink-0"
             type="checkbox"
             checked={attachments}
             onChange={(e) => {
               setAttachments(e.target.checked);
               setPage(1);
             }}
-          />{" "}
+          />
           Has attachment
         </label>
         <select
+          className="mailbox-toolbar-control max-w-full"
           aria-label="Move messages to folder"
           value=""
           disabled={busy || !ids.length}
@@ -230,6 +232,7 @@ function Mailbox({ folder, query }) {
             ))}
         </select>
         <select
+          className="mailbox-toolbar-control max-w-full"
           aria-label="Apply label to messages"
           value=""
           disabled={busy || !ids.length}
@@ -245,6 +248,7 @@ function Mailbox({ folder, query }) {
           ))}
         </select>
         <button
+          className="mailbox-toolbar-control"
           disabled={busy || !ids.length}
           onClick={() => action(folder === "Spam" ? "Inbox" : "Spam", ids)}
         >
@@ -253,12 +257,14 @@ function Mailbox({ folder, query }) {
         {["Trash", "Spam"].includes(folder) && (
           <>
             <button
+              className="mailbox-toolbar-control"
               disabled={busy || !ids.length}
               onClick={() => action("delete", ids)}
             >
               Delete forever
             </button>
             <button
+              className="mailbox-toolbar-control"
               disabled={busy}
               onClick={() => setConfirm({ action: "empty", ids: [] })}
             >

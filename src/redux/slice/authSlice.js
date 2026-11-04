@@ -43,7 +43,10 @@ const slice = createSlice({
         state.bootstrapError = null;
       });
       builder.addCase(thunk.rejected, (state, action) => {
-        state.status = "anonymous";
+        state.status =
+          thunk === restoreSession && action.payload?.status !== 401
+            ? "restoreFailed"
+            : "anonymous";
         state.error =
           thunk === restoreSession && action.payload?.status === 401
             ? null

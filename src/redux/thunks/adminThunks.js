@@ -1,6 +1,28 @@
 import { backend } from "../../api/backend";
 import { createApiThunk } from "./createApiThunk";
 
+export const fetchGroups = createApiThunk(
+  "admin/fetchGroups",
+  (_, { signal }) => backend.groups({ signal }),
+);
+export const createGroup = createApiThunk("admin/createGroup", (body) =>
+  backend.createGroup(body),
+);
+export const updateGroup = createApiThunk("admin/updateGroup", ({ id, body }) =>
+  backend.updateGroup(id, body),
+);
+export const deleteGroup = createApiThunk("admin/deleteGroup", (id) =>
+  backend.deleteGroup(id),
+);
+export const fetchMonitoring = createApiThunk(
+  "admin/fetchMonitoring",
+  (params, { signal }) => backend.monitoring(params, { signal }),
+);
+export const fetchEmailMonitoring = createApiThunk(
+  "admin/fetchEmailMonitoring",
+  (params, { signal }) => backend.emailMonitoring(params, { signal }),
+);
+
 export const fetchAdminSection = createApiThunk(
   "admin/fetchSection",
   async (section) => {
@@ -42,3 +64,4 @@ export const deleteKnownDomain = createApiThunk(
 export const syncContacts = createApiThunk("admin/syncContacts", () =>
   backend.syncContacts(),
 );
+//

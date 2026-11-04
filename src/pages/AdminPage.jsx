@@ -20,11 +20,20 @@ const sections = [
   "inbound-log",
   "zoho-sync",
 ];
-export default function AdminPage() {
+export default function AdminPage({
+  section: suppliedSection,
+  embedded = false,
+}) {
   const { section } = useParams();
-  return <Admin key={section} section={section} />;
+  return (
+    <Admin
+      key={suppliedSection || section}
+      section={suppliedSection || section}
+      embedded={embedded}
+    />
+  );
 }
-function Admin({ section }) {
+function Admin({ section, embedded }) {
   const dispatch = useDispatch();
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState(null);
@@ -104,15 +113,28 @@ function Admin({ section }) {
     });
   }
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <h1 className="text-2xl font-semibold">Administration</h1>
-      <nav className="my-5 flex flex-wrap gap-3">
-        {sections.map((s) => (
-          <Link className="btn-secondary capitalize" key={s} to={`/admin/${s}`}>
-            {s.replaceAll("-", " ")}
-          </Link>
-        ))}
-      </nav>
+    <div className={embedded ? "min-w-0" : "flex-1 overflow-auto p-6"}>
+      {!embedded && (
+        <>
+          <h1 className="text-2xl font-semibold">Administration</h1>
+          <nav className="my-5 flex flex-wrap gap-3">
+            {sections.map((s) => (
+              <Link
+                className="btn-secondary capitalize"
+                key={s}
+                to={`/admin/${s}`}
+              >
+                {s.replaceAll("-", " ")}
+              </Link>
+            ))}
+          </nav>
+        </>
+      )}
+      {embedded && (
+        <h2 className="mb-5 text-xl font-semibold capitalize">
+          {section.replaceAll("-", " ")}
+        </h2>
+      )}
       {!sections.includes(section) && (
         <p className="card">
           {section === "overview"

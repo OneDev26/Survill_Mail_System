@@ -1,7 +1,7 @@
 import axios from "axios";
 export const apiClient = axios.create({
   baseURL: (
-    import.meta.env.VITE_API_BASE_URL || "https://mail-system.ngrok.app"
+    import.meta.env.VITE_API_BASE_URL || "https://mail-backend.ngrok.app"
   ).replace(/\/$/, ""),
   timeout: 20000,
   withCredentials: true,
@@ -13,7 +13,7 @@ let onExpired = () => {};
 let generation = 0;
 export function setSession(session) {
   accessToken = session?.accessToken || null;
-}
+} //
 export function clearSession() {
   generation++;
   accessToken = null;
@@ -55,8 +55,10 @@ apiClient.interceptors.response.use(
       try {
         await refreshSession();
       } catch (refreshError) {
-        clearSession();
-        onExpired();
+        if (refreshError.response?.status === 401) {
+          clearSession();
+          onExpired();
+        }
         throw refreshError;
       }
       return apiClient(config);

@@ -12,7 +12,7 @@ import MailPage from "./pages/MailPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import WorkspacePage from "./pages/WorkspacePage";
-import AdminPage from "./pages/AdminPage";
+import AdminPage from "./pages/AdminConsole";
 import AppLayout from "./components/AppLayout";
 import SessionGate from "./components/SessionGate";
 import Notifications from "./components/Notifications";

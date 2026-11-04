@@ -59,6 +59,9 @@
   .field-label {
     @apply mb-1.5 block text-xs font-medium text-slate-600;
   }
+  .mailbox-toolbar-control {
+    @apply h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-40;
+  }
 }
 
 /* Keep the last message mounted so closing can finish before it disappears. */

@@ -3,11 +3,7 @@ import { createApiThunk } from "./createApiThunk";
 
 // Tokens are held by the HTTP client. Redux receives only public user data.
 async function sessionData(session) {
-  const [folders, labels] = await Promise.all([
-    backend.folders(),
-    backend.labels(),
-  ]);
-  return { user: session.user, ...folders, ...labels };
+  return { user: session.user };
 }
 export const login = createApiThunk("auth/login", async (credentials) =>
   sessionData(await backend.login(credentials)),
@@ -16,7 +12,8 @@ export const restoreSession = createApiThunk(
   "auth/restoreSession",
   async () => sessionData(await backend.refresh()),
   {
-    condition: (_, { getState }) => getState().auth.status === "idle",
+    condition: (_, { getState }) =>
+      ["idle", "restoreFailed"].includes(getState().auth.status),
   },
 );
 export const logout = createApiThunk(

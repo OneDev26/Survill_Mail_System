@@ -6,9 +6,9 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    allowedHosts: ["mail-system.ngrok.app"],
+    allowedHosts: ["mail-frontend.ngrok.app"],
   },
   preview: {
-    allowedHosts: ["mail-system.ngrok.app"],
+    allowedHosts: ["mail-frontend.ngrok.app"],
   },
 });

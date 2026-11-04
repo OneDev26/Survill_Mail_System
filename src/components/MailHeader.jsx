@@ -65,7 +65,6 @@ export default function MailHeader({ query, onSearch, onMenu, onHelp, title }) {
           placeholder="Search mail in this folder"
           className="min-w-0 flex-1 bg-transparent text-sm outline-none"
         />
-        //
         {query && (
           <IconButton
             icon={X}

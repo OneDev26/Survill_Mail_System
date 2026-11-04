@@ -81,6 +81,14 @@ export const backend = {
   saveDomain: (body) => post("/api/known-domains", body),
   deleteDomain: (key) => del(`/api/known-domains/${id(key)}`),
   users: () => get("/api/admin/users"),
+  groups: (options) => get("/api/admin/groups", undefined, options),
+  createGroup: (body) => post("/api/admin/groups", body),
+  updateGroup: (key, body) => patch(`/api/admin/groups/${id(key)}`, body),
+  deleteGroup: (key) => del(`/api/admin/groups/${id(key)}`),
+  monitoring: (params, options) =>
+    get("/api/admin/monitoring", params, options),
+  emailMonitoring: (params, options) =>
+    get("/api/admin/email-monitoring", params, options),
   createUser: (body) => post("/api/admin/users", body),
   updateUser: (key, body) => patch(`/api/admin/users/${id(key)}`, body),
   addAlias: (key, body) => post(`/api/admin/users/${id(key)}/aliases`, body),
@@ -88,5 +96,5 @@ export const backend = {
     del(`/api/admin/users/${id(key)}/aliases/${id(email)}`),
   inboundLog: (limit = 100) => get("/api/admin/inbound-log", { limit }),
   syncStatus: () => get("/api/admin/zoho-sync"),
-  syncContacts: () => post("/api/admin/zoho-sync"),
+  syncContacts: () => post("/api/admin/zoho-sync"), //
 };
