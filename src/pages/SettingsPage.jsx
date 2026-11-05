@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
 import { FolderPlus, Tag, Trash2 } from "lucide-react";
-import { normalizeSettings } from "../redux/slice/settingsSlice";
-import { saveSettings } from "../redux/thunks/profileThunks";
+import { normalizeSettings, settingsPayload } from "../utils/settings";
+import { fetchSettings, saveSettings } from "../redux/thunks/settingsThunks";
 import { reportError } from "../utils/errors";
 import {
   createFolder,
@@ -18,6 +18,53 @@ import { IconButton } from "../components/Ui";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function SettingsPage() {
+  const dispatch = useDispatch();
+  const [load, setLoad] = useState({ loading: true, error: null });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const operation = dispatch(fetchSettings());
+    operation.unwrap().then(
+      () => {
+        if (active) setLoad({ loading: false, error: null });
+      },
+      (error) => {
+        if (active) setLoad({ loading: false, error });
+      },
+    );
+    return () => {
+      active = false;
+      operation.abort();
+    };
+  }, [dispatch, revision]);
+  if (load.loading)
+    return (
+      <p role="status" className="p-8">
+        Loading settings…
+      </p>
+    );
+  if (load.error)
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        <p role="alert" className="my-4 text-red-600">
+          {load.error.message}
+        </p>
+        <button
+          className="btn-secondary"
+          onClick={() => {
+            setLoad({ loading: true, error: null });
+            setRevision((value) => value + 1);
+          }}
+        >
+          Retry settings
+        </button>
+      </div>
+    );
+  return <SettingsEditor />;
+}
+
+function SettingsEditor() {
   const settings = useSelector((state) => state.settings);
   const { labels, customFolders, folders } = useSelector((state) => state.mail);
   const [form, setForm] = useState(() => normalizeSettings(settings));
@@ -28,6 +75,7 @@ export default function SettingsPage() {
   const dispatch = useDispatch();
   const { hash } = useLocation();
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
   async function execute(action) {
     setBusy(true);
     try {
@@ -91,8 +139,23 @@ export default function SettingsPage() {
           className="space-y-6"
           onSubmit={async (event) => {
             event.preventDefault();
-            if (!(await execute(saveSettings(form)))) return;
-            dispatch(notify({ text: "Preferences saved." }));
+            setBusy(true);
+            setSaveError("");
+            try {
+              const before = settingsPayload(normalizeSettings(settings));
+              const changes = Object.fromEntries(
+                Object.entries(settingsPayload(form)).filter(
+                  ([key, value]) => value !== before[key],
+                ),
+              );
+              const saved = await dispatch(saveSettings(changes)).unwrap();
+              setForm(normalizeSettings(saved));
+              dispatch(notify({ text: "Preferences saved." }));
+            } catch (error) {
+              setSaveError(error.message);
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           <section className="card">
@@ -143,9 +206,11 @@ export default function SettingsPage() {
                   setForm({ ...form, pageSize: Number(event.target.value) })
                 }
               >
-                {[10, 20, 50].map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
+                {[...new Set([10, 20, 25, 50, 100, form.pageSize])]
+                  .sort((a, b) => a - b)
+                  .map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
               </select>
             </label>
           </section>
@@ -174,12 +239,20 @@ export default function SettingsPage() {
               }
             />
           </section>
+          {saveError && (
+            <p role="alert" className="text-sm text-red-600">
+              {saveError}
+            </p>
+          )}
           <div className="flex justify-end gap-3">
             <button
               type="button"
               disabled={!dirty}
               className="btn-secondary"
-              onClick={() => setForm(settings)}
+              onClick={() => {
+                setForm(normalizeSettings(settings));
+                setSaveError("");
+              }}
             >
               Cancel changes
             </button>

@@ -90,7 +90,7 @@ export default function ComposeModal({ initial }) {
     }, 250);
     return () => {
       active = false;
-      clearTimeout(timer);
+      clearTimeout(timer); //
     };
   }, [form.to, dispatch]);
   useEffect(() => {

@@ -1,0 +1,125 @@
+import * as actions from "../redux/thunks/adminThunks";
+
+// Only fields documented for each endpoint are serialized by the editor.
+export const adminResourceConfig = {
+  domains: {
+    title: "Domains",
+    singular: "domain",
+    read: actions.fetchAdminDomains,
+    create: actions.createAdminDomain,
+    update: actions.updateAdminDomain,
+    remove: actions.deleteAdminDomain,
+    defaults: { domain: "", name: "" },
+    fields: [
+      { key: "domain", label: "Domain", immutable: true },
+      { key: "name", label: "Domain name" },
+    ],
+    columns: [
+      ["Domain", "domain"],
+      ["Name", "name"],
+      ["Status", "status"],
+      ["Primary", "primary"],
+    ],
+    stats: [
+      ["Total domains", "totalDomains"],
+      ["Verified", "verified"],
+      ["Pending", "pending"],
+    ],
+  },
+  aliases: {
+    title: "Aliases",
+    singular: "alias",
+    read: actions.fetchAdminAliases,
+    create: actions.createAdminAlias,
+    remove: actions.deleteAdminAlias,
+    defaults: { email: "", userId: "", canSend: true },
+    fields: [
+      { key: "email", label: "Alias email", type: "email" },
+      { key: "userId", label: "Mailbox user", type: "user" },
+      { key: "canSend", label: "Allow sending", type: "checkbox" },
+    ],
+    columns: [
+      ["Alias", "email"],
+      ["Mailbox", "userEmail"],
+      ["User", "userName"],
+      ["Can send", "canSend"],
+    ],
+  },
+  routing: {
+    title: "Mail routing",
+    singular: "rule",
+    serverSearch: true,
+    read: actions.fetchRoutingRules,
+    create: actions.createRoutingRule,
+    update: actions.updateRoutingRule,
+    remove: actions.deleteRoutingRule,
+    defaults: {
+      name: "",
+      matchField: "domain",
+      action: "block",
+      priority: 200,
+      status: "active",
+      criteria: { value: "" },
+    },
+    fields: [
+      { key: "name", label: "Rule name" },
+      {
+        key: "matchField",
+        label: "Match field",
+        hint: "For example: domain. Use a match field supported by your mail server.",
+      },
+      {
+        key: "action",
+        label: "Action",
+        hint: "For example: block. Use an action supported by your mail server.",
+      },
+      { key: "priority", label: "Priority", type: "number" },
+      { key: "status", label: "Status", options: ["active", "paused"] },
+      {
+        key: "criteria",
+        label: "Criteria (JSON)",
+        type: "json",
+        hint: 'Example: {"value":"example.com"}',
+      },
+    ],
+    columns: [
+      ["Name", "name"],
+      ["Match field", "matchField"],
+      ["Action", "action"],
+      ["Priority", "priority"],
+      ["Status", "status"],
+      ["Criteria", "criteria"],
+    ],
+    stats: [
+      ["Total rules", "totalRules"],
+      ["Active rules", "activeRules"],
+      ["Paused rules", "pausedRules"],
+    ],
+  },
+  stores: {
+    title: "Stores",
+    singular: "store",
+    read: actions.fetchStores,
+    create: actions.createStore,
+    update: actions.updateStore,
+    remove: actions.deleteStore,
+    defaults: { name: "", code: "", location: "", status: "active" },
+    fields: [
+      { key: "name", label: "Store name" },
+      { key: "code", label: "Store code" },
+      { key: "location", label: "Location" },
+      { key: "status", label: "Status", options: ["active", "inactive"] },
+    ],
+    columns: [
+      ["Name", "name"],
+      ["Code", "code"],
+      ["Location", "location"],
+      ["Status", "status"],
+    ],
+    stats: [
+      ["Total stores", "totalStores"],
+      ["Active stores", "activeStores"],
+      ["Inactive stores", "inactiveStores"],
+    ],
+  },
+};

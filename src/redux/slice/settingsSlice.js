@@ -1,49 +1,22 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { signatureText } from "../../api/models";
 import { login, restoreSession } from "../thunks/authThunks";
-import { saveSettings } from "../thunks/profileThunks";
+import {
+  fetchSettings,
+  saveSettings,
+  replaceSettings,
+} from "../thunks/settingsThunks";
 import { trackRequests } from "../requestState";
 
-export const defaultSettings = {
-  compact: false,
-  pageSize: 10,
-  markReadOnOpen: true,
-  signature: "",
-  useSignature: true,
-  confirmTrash: false,
-};
-export function normalizeSettings(preferences = {}, signature = "") {
-  return {
-    compact:
-      typeof preferences.compact === "boolean" ? preferences.compact : false,
-    pageSize: [10, 20, 50].includes(preferences.pageSize)
-      ? preferences.pageSize
-      : 10,
-    markReadOnOpen:
-      typeof preferences.markReadOnOpen === "boolean"
-        ? preferences.markReadOnOpen
-        : true,
-    signature:
-      typeof preferences.signature === "string"
-        ? preferences.signature
-        : signature,
-    useSignature:
-      typeof preferences.useSignature === "boolean"
-        ? preferences.useSignature
-        : true,
-    confirmTrash:
-      typeof preferences.confirmTrash === "boolean"
-        ? preferences.confirmTrash
-        : false,
-  };
-}
+import { defaultSettings, normalizeSettings } from "../../utils/settings";
 const slice = createSlice({
   name: "settings",
-  initialState: { ...defaultSettings, requests: {} },
+  initialState: { ...defaultSettings, preferences: {}, requests: {} },
   reducers: {},
   extraReducers: (builder) => {
     for (const thunk of [login, restoreSession]) {
       builder.addCase(thunk.fulfilled, (state, { payload }) => {
+        state.preferences = payload.user.preferences || {};
         Object.assign(
           state,
           normalizeSettings(
@@ -53,10 +26,19 @@ const slice = createSlice({
         );
       });
     }
-    builder.addCase(saveSettings.fulfilled, (state, { payload }) => {
-      Object.assign(state, normalizeSettings(payload));
-    });
-    trackRequests(builder, [saveSettings]);
+    for (const thunk of [fetchSettings, saveSettings, replaceSettings]) {
+      builder.addCase(thunk.fulfilled, (state, action) => {
+        if (
+          state.requests[thunk.typePrefix]?.requestId !== action.meta.requestId
+        )
+          return;
+        state.preferences = action.payload || {};
+        Object.assign(state, normalizeSettings(action.payload));
+        if (thunk !== fetchSettings)
+          delete state.requests[fetchSettings.typePrefix];
+      });
+    }
+    trackRequests(builder, [fetchSettings, saveSettings, replaceSettings]);
   },
 });
 export default slice.reducer;

@@ -7,8 +7,9 @@ Every UI-triggered API operation is dispatched through Redux Toolkit `createAsyn
 | `authThunks.js`      | Login, cookie restoration, logout, password recovery/change                     |
 | `mailThunks.js`      | Mail queries, organization, bulk actions, drafts, uploads, sending, suggestions |
 | `workspaceThunks.js` | Contact/task/note/event lists and CRUD                                          |
-| `profileThunks.js`   | Profile, avatar, preferences and signature                                      |
-| `adminThunks.js`     | User/alias/domain management, inbound log, contact sync                         |
+| `profileThunks.js`   | Profile fields, profile HTML signature and avatar                              |
+| `settingsThunks.js`  | Load preferences (GET), save partial preferences (PATCH), replace preferences (PUT) |
+| `adminThunks.js`     | Overview, users, aliases, domains, groups, routing, stores, reports, policies, monitoring and contact sync                         |
 | `createApiThunk.js`  | Serializable errors and rejecting responses from a previous session             |
 
 ## Component pattern

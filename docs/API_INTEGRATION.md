@@ -1,5 +1,7 @@
 # Survill Mail API integration
 
+The expanded November 4 admin reference is now integrated; see [current admin mapping](ADMIN_API_INTEGRATION.md). Historical preview and coverage descriptions below predate that expansion.
+
 Update, 4 November 2026: six admin group/monitoring routes from the supplied reference are now integrated, bringing the local inventory to 75 routes (74 JSON/multipart adapters plus signed files). See [Admin API integration](ADMIN_API_INTEGRATION.md) for current behavior and contract limits. Earlier counts below describe the original integration review.
 
 Reviewed 31 October 2026 against the supplied HTML reference and backend source. All **69 registered method/path combinations** appear in the reference; no missing or stale routes were found in that comparison. Route coverage does not prove deployment health or backend correctness.
@@ -36,7 +38,7 @@ The 69th route serves signed files. The frontend follows returned URLs rather th
 - Mail: server search/filter/pagination, full detail reads with configurable mark-read, archive/spam/trash/restore/move, read/star flags, labels, undo, confirmed permanent deletion and empty Trash/Spam.
 - Compose: one server-created draft, serialized autosave, multipart `files` upload, attachment removal, send-enabled aliases, recipient suggestions, reply/forward source IDs, send and discard. Failed sends keep the draft/editor.
 - Workspace: contact/task/note/event CRUD. Contacts load all available pages; other collections are capped at 1,000 by the backend. Read-only/company-contact controls reflect permissions. Tasks map `done/due` to `completed/dueDate`; event inputs convert local times to ISO instants and preserve cross-day end dates.
-- Profile/settings: permitted display-name updates, recovery email, multipart `avatar` upload/removal, password changes, preferences and escaped text signatures.
+- Profile/settings: permitted display-name updates, recovery email, multipart `avatar` upload/removal, password changes, and plain-text signature preferences. Settings GET/PATCH/PUT use the documented flat write payloads; profile HTML signatures remain a separate profile update. See [settings integration](SETTINGS_API_INTEGRATION.md).
 - Administration: users, shared aliases, known company domains, inbound processing log, Zoho sync status/run. Unsupported sections report unavailable and contain no local substitutes.
 
 ## Contract details and UI limits

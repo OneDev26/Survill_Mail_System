@@ -1,9 +1,8 @@
 // Real backend smoke test. Does not send mail. --write creates temporary owned
 // resources and deletes them in finally; use a dedicated test account/database.
-const origin = (process.env.API_URL || "https://mail-backend.ngrok.app").replace(
-  /\/$/,
-  "",
-);
+const origin = (
+  process.env.API_URL || "https://mail-backend.ngrok.app"
+).replace(/\/$/, "");
 const email = process.env.TEST_EMAIL;
 const password = process.env.TEST_PASSWORD;
 if (!email || !password) {
@@ -64,7 +63,6 @@ try {
     "/api/tasks",
     "/api/notes",
     "/api/events",
-    "/api/known-domains",
   ])
     await call("GET", path);
   if (refreshed.user.role === "admin")

@@ -5,21 +5,10 @@ import {
   fetchAdminSection,
   createUser,
   updateUser,
-  assignAlias,
-  removeAlias,
-  saveKnownDomain,
-  deleteKnownDomain,
   syncContacts,
 } from "../redux/thunks/adminThunks";
 import Dialog from "../components/Dialog";
-import ConfirmDialog from "../components/ConfirmDialog";
-const sections = [
-  "users",
-  "aliases",
-  "known-domains",
-  "inbound-log",
-  "zoho-sync",
-];
+const sections = ["users", "inbound-log", "zoho-sync"];
 export default function AdminPage({
   section: suppliedSection,
   embedded = false,
@@ -40,7 +29,6 @@ function Admin({ section, embedded }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [editor, setEditor] = useState(null);
-  const [confirm, setConfirm] = useState(null);
   const [version, setVersion] = useState(0);
   useEffect(() => {
     let active = true;
@@ -65,7 +53,6 @@ function Admin({ section, embedded }) {
     try {
       await fn();
       setEditor(null);
-      setConfirm(null);
       setVersion((v) => v + 1);
     } catch (err) {
       setError(err.message);
@@ -76,40 +63,24 @@ function Admin({ section, embedded }) {
   async function save(e) {
     e.preventDefault();
     await run(async () => {
-      if (section === "known-domains")
+      const body = {
+        displayName: editor.displayName,
+        role: editor.role,
+        recoveryEmail: editor.recoveryEmail || null,
+        ...(editor.password ? { password: editor.password } : {}),
+      };
+      if (editor.id)
         await dispatch(
-          saveKnownDomain({ domain: editor.domain, name: editor.name }),
-        ).unwrap();
-      else if (section === "aliases")
-        await dispatch(
-          assignAlias({
+          updateUser({
             id: editor.id,
             body: {
-              email: editor.email,
-              canSend: editor.canSend,
+              ...body,
+              isActive: editor.isActive,
             },
           }),
         ).unwrap();
-      else {
-        const body = {
-          displayName: editor.displayName,
-          role: editor.role,
-          recoveryEmail: editor.recoveryEmail || null,
-          ...(editor.password ? { password: editor.password } : {}),
-        };
-        if (editor.id)
-          await dispatch(
-            updateUser({
-              id: editor.id,
-              body: {
-                ...body,
-                isActive: editor.isActive,
-              },
-            }),
-          ).unwrap();
-        else
-          await dispatch(createUser({ ...body, email: editor.email })).unwrap();
-      }
+      else
+        await dispatch(createUser({ ...body, email: editor.email })).unwrap();
     });
   }
   return (
@@ -138,7 +109,7 @@ function Admin({ section, embedded }) {
       {!sections.includes(section) && (
         <p className="card">
           {section === "overview"
-            ? "Manage mailbox users, aliases, trusted company identities, inbound processing, and contact synchronization using the sections above."
+            ? "Manage mailbox users, inbound processing, and contact synchronization using the sections above."
             : "This feature has no endpoint in the supplied backend. It is unavailable in connected mode."}
         </p>
       )}
@@ -148,32 +119,22 @@ function Admin({ section, embedded }) {
         </p>
       )}
       <fieldset disabled={busy} className="space-y-4">
-        {["users", "known-domains"].includes(section) && (
+        {section === "users" && (
           <button
             className="btn-primary"
             onClick={() =>
-              setEditor(
-                section === "users"
-                  ? {
-                      email: "",
-                      displayName: "",
-                      password: "",
-                      recoveryEmail: "",
-                      role: "member",
-                      isActive: true,
-                    }
-                  : { domain: "", name: "" },
-              )
+              setEditor({
+                email: "",
+                displayName: "",
+                password: "",
+                recoveryEmail: "",
+                role: "member",
+                isActive: true,
+              })
             }
           >
-            Create {section === "users" ? "user" : "known domain"}
+            Create user
           </button>
-        )}
-        {section === "known-domains" && (
-          <p className="text-sm">
-            Known domains resolve sender identities. They do not provision mail
-            hosting or verify DNS.
-          </p>
         )}
         {items.map((item, index) => (
           <article
@@ -184,7 +145,7 @@ function Admin({ section, embedded }) {
               <>
                 <h2 className="font-semibold">{item.displayName}</h2>
                 <p>
-                  {item.email} · {item.role} ·{" "}
+                  {item.email} Â· {item.role} Â·{" "}
                   {item.isActive ? "Active" : "Inactive"}
                 </p>
                 <button
@@ -195,60 +156,10 @@ function Admin({ section, embedded }) {
                 </button>
               </>
             )}
-            {section === "aliases" && (
-              <>
-                <h2>{item.email}</h2>
-                {item.aliases.map((a) => (
-                  <p key={a.email}>
-                    {a.email} ({a.canSend ? "send and receive" : "receive only"}
-                    ){" "}
-                    <button
-                      className="btn-secondary"
-                      onClick={() =>
-                        setConfirm({
-                          kind: "alias",
-                          id: item.id,
-                          email: a.email,
-                        })
-                      }
-                    >
-                      Remove alias
-                    </button>
-                  </p>
-                ))}
-                <button
-                  className="btn-secondary"
-                  onClick={() =>
-                    setEditor({ id: item.id, email: "", canSend: true })
-                  }
-                >
-                  Assign alias to {item.email}
-                </button>
-              </>
-            )}
-            {section === "known-domains" && (
-              <>
-                <h2>
-                  {item.domain} · {item.name}
-                </h2>
-                <button
-                  className="btn-secondary"
-                  onClick={() => setEditor(item)}
-                >
-                  Edit domain
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => setConfirm({ kind: "domain", id: item.id })}
-                >
-                  Remove domain
-                </button>
-              </>
-            )}
             {section === "inbound-log" && (
               <>
                 <h2>
-                  {item.status} · {item.processed_at}
+                  {item.status} Â· {item.processed_at}
                 </h2>
                 <pre className="whitespace-pre-wrap break-all text-xs">
                   {JSON.stringify(item, null, 2)}
@@ -277,37 +188,23 @@ function Admin({ section, embedded }) {
       </fieldset>
       {editor && (
         <Dialog
-          title={
-            section === "users"
-              ? "Mailbox user"
-              : section === "aliases"
-                ? "Assign alias"
-                : "Known domain"
-          }
+          title="Mailbox user"
           onClose={() => {
             if (!busy) setEditor(null);
           }}
         >
           <form className="space-y-4 p-6" onSubmit={save}>
             <fieldset disabled={busy} className="space-y-4">
-              {(section === "known-domains"
-                ? [
-                    ["domain", "Domain", "text"],
-                    ["name", "Company name", "text"],
-                  ]
-                : section === "aliases"
-                  ? [["email", "Alias email", "email"]]
-                  : [
-                      ["displayName", "Display name", "text"],
-                      ["email", "Email", "email"],
-                      ["recoveryEmail", "Recovery email", "email"],
-                      [
-                        "password",
-                        editor.id ? "New password (optional)" : "Password",
-                        "password",
-                      ],
-                    ]
-              ).map(([key, label, type]) => (
+              {[
+                ["displayName", "Display name", "text"],
+                ["email", "Email", "email"],
+                ["recoveryEmail", "Recovery email", "email"],
+                [
+                  "password",
+                  editor.id ? "New password (optional)" : "Password",
+                  "password",
+                ],
+              ].map(([key, label, type]) => (
                 <label className="block" key={key}>
                   {label}
                   <input
@@ -357,18 +254,6 @@ function Admin({ section, embedded }) {
                   )}
                 </>
               )}
-              {section === "aliases" && (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editor.canSend}
-                    onChange={(e) =>
-                      setEditor({ ...editor, canSend: e.target.checked })
-                    }
-                  />{" "}
-                  Allow sending
-                </label>
-              )}
               {error && (
                 <p role="alert" className="text-red-600">
                   {error}
@@ -378,23 +263,6 @@ function Admin({ section, embedded }) {
             </fieldset>
           </form>
         </Dialog>
-      )}
-      {confirm && (
-        <ConfirmDialog
-          title="Remove assignment?"
-          description="This change takes effect on the server."
-          confirmLabel="Remove"
-          onClose={() => setConfirm(null)}
-          onConfirm={() =>
-            run(() =>
-              confirm.kind === "alias"
-                ? dispatch(
-                    removeAlias({ id: confirm.id, email: confirm.email }),
-                  ).unwrap()
-                : dispatch(deleteKnownDomain(confirm.id)).unwrap(),
-            )
-          }
-        />
       )}
     </div>
   );

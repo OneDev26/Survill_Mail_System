@@ -6,7 +6,6 @@ import settings from "./slice/settingsSlice";
 import workspace from "./slice/workspaceSlice";
 import ui from "./slice/uiSlice";
 import admin from "./slice/adminSlice";
-import adminPreview from "./slice/adminPreviewSlice";
 import { logout } from "./thunks/authThunks";
 
 const combined = combineReducers({
@@ -17,7 +16,6 @@ const combined = combineReducers({
   workspace,
   ui,
   admin,
-  adminPreview,
 });
 export function rootReducer(state, action) {
   if (sessionExpired.match(action) || logout.fulfilled.match(action)) {

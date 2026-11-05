@@ -1,4 +1,5 @@
 import { request, setSession, clearSession, refreshSession } from "./client";
+import { settingsApi } from "./settings";
 const id = encodeURIComponent;
 const get = (path, params, options) =>
   request("GET", path, undefined, params, options);
@@ -42,9 +43,11 @@ export const backend = {
   updateProfile: (body) => patch("/api/profile", body),
   avatar: (file) => upload("PUT", "/api/profile/avatar", "avatar", [file]),
   removeAvatar: () => del("/api/profile/avatar"),
-  settings: () => get("/api/settings"),
+  settings: settingsApi.get,
   saveSettings: (preferences, replace = false) =>
-    request(replace ? "PUT" : "PATCH", "/api/settings", { preferences }),
+    replace
+      ? settingsApi.replace(preferences)
+      : settingsApi.update(preferences),
   folders: () => get("/api/folders"),
   createFolder: (name) => post("/api/folders", { name }),
   renameFolder: (key, name) => patch(`/api/folders/${id(key)}`, { name }),
@@ -77,10 +80,38 @@ export const backend = {
   remove: (kind, key) => del(`/api/${id(kind)}/${id(key)}`),
   suggest: (q) => get("/api/contacts/suggest", { q }),
   identify: (emails) => post("/api/identify", { emails }),
-  domains: () => get("/api/known-domains"),
-  saveDomain: (body) => post("/api/known-domains", body),
-  deleteDomain: (key) => del(`/api/known-domains/${id(key)}`),
-  users: () => get("/api/admin/users"),
+  adminOverview: (options) => get("/api/admin/overview", undefined, options),
+  adminOverviewSummary: (options) =>
+    get("/api/admin/overview/summary", undefined, options),
+  adminReports: (options) => get("/api/admin/reports", undefined, options),
+  adminReportsSummary: (options) =>
+    get("/api/admin/reports/summary", undefined, options),
+  adminDomains: (params, options) => get("/api/admin/domains", params, options),
+  createAdminDomain: (body) => post("/api/admin/domains", body),
+  updateAdminDomain: (key, body) =>
+    patch(`/api/admin/domains/${id(key)}`, body),
+  deleteAdminDomain: (key) => del(`/api/admin/domains/${id(key)}`),
+  adminAliases: (params, options) => get("/api/admin/aliases", params, options),
+  createAdminAlias: (body) => post("/api/admin/aliases", body),
+  deleteAdminAlias: (key) => del(`/api/admin/aliases/${id(key)}`),
+  senderControls: (params, options) =>
+    get("/api/admin/sender-controls", params, options),
+  createSenderControl: (body) => post("/api/admin/sender-controls", body),
+  updateSenderControl: (key, body) =>
+    patch(`/api/admin/sender-controls/${id(key)}`, body),
+  deleteSenderControl: (key) => del(`/api/admin/sender-controls/${id(key)}`),
+  routingRules: (params, options) => get("/api/admin/routing", params, options),
+  createRoutingRule: (body) => post("/api/admin/routing", body),
+  updateRoutingRule: (key, body) =>
+    patch(`/api/admin/routing/${id(key)}`, body),
+  deleteRoutingRule: (key) => del(`/api/admin/routing/${id(key)}`),
+  stores: (params, options) => get("/api/admin/stores", params, options),
+  createStore: (body) => post("/api/admin/stores", body),
+  updateStore: (key, body) => patch(`/api/admin/stores/${id(key)}`, body),
+  deleteStore: (key) => del(`/api/admin/stores/${id(key)}`),
+  adminSecurity: (options) => get("/api/admin/security", undefined, options),
+  updateAdminSecurity: (body) => patch("/api/admin/security", body),
+  users: (options) => get("/api/admin/users", undefined, options),
   groups: (options) => get("/api/admin/groups", undefined, options),
   createGroup: (body) => post("/api/admin/groups", body),
   updateGroup: (key, body) => patch(`/api/admin/groups/${id(key)}`, body),
@@ -94,7 +125,10 @@ export const backend = {
   addAlias: (key, body) => post(`/api/admin/users/${id(key)}/aliases`, body),
   removeAlias: (key, email) =>
     del(`/api/admin/users/${id(key)}/aliases/${id(email)}`),
-  inboundLog: (limit = 100) => get("/api/admin/inbound-log", { limit }),
+  inboundLog: (limit = 25, options) =>
+    get("/api/admin/inbound-log", { limit }, options),
+  auditLog: (limit = 25, options) =>
+    get("/api/admin/audit-log", { limit }, options),
   syncStatus: () => get("/api/admin/zoho-sync"),
   syncContacts: () => post("/api/admin/zoho-sync"), //
 };

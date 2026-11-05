@@ -33,7 +33,7 @@ async function mockApi(page, options = {}) {
     recoveryEmail: "recovery@example.com",
     avatarUrl: null,
     signatureHtml: "<p>Server signature</p>",
-    preferences: {},
+    preferences: options.preferences || {},
     aliases: [],
   };
   const folders = ["inbox", "drafts", "sent", "archive", "spam", "trash"].map(
@@ -97,6 +97,57 @@ async function mockApi(page, options = {}) {
     memberCount: group.members.length,
     senderCount: group.members.filter((m) => m.canSend).length,
   });
+  const adminRows = {
+    domains: [
+      {
+        id: "domain-1",
+        domain: "studio.co",
+        name: "Studio domain",
+        primary: true,
+        status: "verified",
+      },
+    ],
+    aliases: [
+      {
+        id: "alias-1",
+        email: "sales@survill.com",
+        userId,
+        userEmail: user.email,
+        userName: user.displayName,
+        canSend: true,
+      },
+    ],
+    routing: [
+      {
+        id: "rule-1",
+        name: "Block spam",
+        matchField: "domain",
+        action: "block",
+        priority: 200,
+        status: "active",
+        criteria: { value: "example.com" },
+      },
+    ],
+    stores: [
+      {
+        id: "store-1",
+        name: "Downtown Hub",
+        code: "DTH-01",
+        location: "New York",
+        status: "active",
+      },
+    ],
+    "sender-controls": [],
+  };
+  let adminSecurity = {
+    requireMfa: true,
+    allowExternalForwarding: false,
+    allowImapAccess: true,
+    allowPopAccess: false,
+    sessionDurationMinutes: 60,
+    minimumPasswordLength: 12,
+    retentionPeriodDays: 365,
+  };
   const collections = { contacts: [], tasks: [], notes: [], events: [] };
   const session = () => ({
     accessToken: expired ? "rotated-token" : "test-token",
@@ -123,6 +174,101 @@ async function mockApi(page, options = {}) {
     });
     const json = (data, status = 200) => route.fulfill({ status, json: data });
     const empty = () => route.fulfill({ status: 204 });
+    if (["/api/admin/overview", "/api/admin/overview/summary"].includes(path))
+      return json({
+        mailSummary: {
+          totalMailCopies: 120,
+          inboxCopies: 80,
+          unreadMessages: 14,
+          withAttachments: 31,
+        },
+        organization: {
+          directoryUsers: 3,
+          activeUsers: 3,
+          domains: 1,
+          contacts: 0,
+          sampleMessages: 21,
+        },
+        workspaceSetup: { directoryReady: true, usersConnected: 3 },
+        recentActivity: [
+          {
+            title: "Latest server activity",
+            sender: "alice@example.com",
+            receivedAt: "2026-11-04T10:15:00Z",
+          },
+        ],
+      });
+    if (["/api/admin/reports", "/api/admin/reports/summary"].includes(path))
+      return json({
+        mailboxDistribution: [
+          { folder: "inbox", count: 6 },
+          { folder: "sent", count: 3 },
+        ],
+        directoryCapacity: {
+          allocatedGb: 100,
+          usedGb: 0,
+          distributedGroups: 2,
+          alternateAddresses: 1,
+          serverMetricsAvailable: false,
+          message: "Delivery telemetry not configured.",
+        },
+        summary: { totalUsers: 3, totalDomains: 1 },
+      });
+    if (path === "/api/admin/security") {
+      if (method === "GET") return json({ item: adminSecurity });
+      if (options.adminWriteFails)
+        return json({ error: "Security update rejected" }, 400);
+      adminSecurity = { ...adminSecurity, ...body };
+      return json({ ok: true });
+    }
+    const adminMatch = path.match(
+      /^\/api\/admin\/(domains|aliases|routing|stores|sender-controls)(?:\/([^/]+))?$/,
+    );
+    if (adminMatch) {
+      const [, kind, id] = adminMatch;
+      if (method === "GET") {
+        if (options.adminReadFails)
+          return json({ error: "Admin data unavailable" }, 503);
+        const items = adminRows[kind];
+        return json({
+          items,
+          totalDomains: items.length,
+          verified: items.filter((r) => r.status === "verified").length,
+          pending: 0,
+          primaryDomain:
+            kind === "domains" ? items.find((r) => r.primary) : undefined,
+          totalRules: items.length,
+          activeRules: items.filter((r) => r.status === "active").length,
+          pausedRules: items.filter((r) => r.status === "paused").length,
+          totalStores: items.length,
+          activeStores: items.filter((r) => r.status === "active").length,
+          inactiveStores: items.filter((r) => r.status === "inactive").length,
+        });
+      }
+      if (options.adminWriteFails)
+        return json({ error: "Admin change rejected" }, 409);
+      if (method === "DELETE") {
+        adminRows[kind] = adminRows[kind].filter((r) => r.id !== id);
+        return empty();
+      }
+      if (method === "PATCH") {
+        Object.assign(
+          adminRows[kind].find((r) => r.id === id),
+          body,
+        );
+        return json({ ok: true });
+      }
+      const item = {
+        ...body,
+        id: `${kind}-${adminRows[kind].length + 1}`,
+        ...(kind === "domains" ? { primary: false, status: "pending" } : {}),
+        ...(kind === "aliases"
+          ? { userEmail: user.email, userName: user.displayName }
+          : {}),
+      };
+      adminRows[kind].push(item);
+      return json({ item }, 201);
+    }
     if (path.startsWith("/api/admin/groups")) {
       if (options.groupFailure && method !== "GET")
         return json({ error: "Group change rejected" }, 409);
@@ -218,7 +364,8 @@ async function mockApi(page, options = {}) {
     }
     if (path === "/api/profile/avatar") return json({ user });
     if (path === "/api/settings") {
-      if (body) Object.assign(user.preferences, body.preferences);
+      if (method === "PUT") user.preferences = { ...body };
+      else if (method === "PATCH") Object.assign(user.preferences, body);
       return json({ preferences: user.preferences });
     }
     if (path === "/api/folders") {
@@ -360,8 +507,10 @@ async function mockApi(page, options = {}) {
       return json({ [kind.slice(0, -1)]: item }, key ? 200 : 201);
     }
     if (path === "/api/admin/users") return json({ users: [user] });
-    if (path === "/api/known-domains") return json({ items: [] });
-    if (path === "/api/admin/inbound-log") return json({ items: [] });
+    if (path === "/api/admin/inbound-log")
+      return json({ items: options.inboundItems || [] });
+    if (path === "/api/admin/audit-log")
+      return json(options.auditLog || { available: true, total: 0, items: [] });
     if (path === "/api/admin/zoho-sync")
       return json({ configured: false, last: null });
     return json({ error: `Unmocked ${method} ${path}` }, 501);
@@ -666,7 +815,7 @@ test("admin monitoring uses live summaries, filters and metadata", async ({
   await expect(
     page.getByRole("region", { name: "Monitoring overview" }),
   ).toContainText("120");
-  expect(calls.some((c) => c.path === "/api/admin/monitoring")).toBe(true);
+  expect(calls.some((c) => c.path === "/api/admin/overview")).toBe(true);
   await page
     .getByRole("link", { name: "Email monitoring", exact: true })
     .click();
@@ -710,6 +859,146 @@ test("admin monitoring uses live summaries, filters and metadata", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test("admin audit log displays events, limits, unavailable state and retry", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, {
+    admin: true,
+    auditLog: {
+      available: true,
+      total: 42,
+      items: [
+        {
+          id: "6c7a-event",
+          eventType: "user.login",
+          actorEmail: "admin@survill.com",
+          targetType: "user",
+          targetId: "7d1a-user",
+          details: { ip: "203.0.113.41", userAgent: "Chrome" },
+          createdAt: "2026-11-04T10:15:00.000Z",
+        },
+      ],
+    },
+  });
+  await login(page);
+  await page.goto("/admin/audit");
+  const table = page.getByRole("table", { name: "Audit log", exact: true });
+  for (const value of [
+    "6c7a-event",
+    "user.login",
+    "admin@survill.com",
+    "7d1a-user",
+    "203.0.113.41",
+    "Chrome",
+    "2026-11-04T10:15:00.000Z",
+  ])
+    await expect(table).toContainText(value);
+  await expect(page.getByText("Showing 1 of 42 audit events")).toBeVisible();
+  const reads = () =>
+    calls.filter((call) => call.path === "/api/admin/audit-log");
+  expect(reads().at(-1)).toMatchObject({
+    method: "GET",
+    params: { limit: "25" },
+  });
+  await page.getByLabel("Record limit").selectOption("100");
+  await expect.poll(() => reads().at(-1).params.limit).toBe("100");
+  await expect(table).toBeVisible();
+  const count = reads().length;
+  await page.getByRole("button", { name: "Refresh audit log" }).click();
+  await expect.poll(() => reads().length).toBeGreaterThan(count);
+  await expect(table).toBeVisible();
+  await page.route("**/api/admin/audit-log?*", (route) =>
+    route.fulfill({
+      json: {
+        available: false,
+        message: "Audit tracking is disabled for this organization.",
+        items: [],
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "Refresh audit log" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Audit tracking is disabled for this organization.",
+  );
+  await expect(table).toHaveCount(0);
+  await expect(page.getByText(/Showing .* audit events/)).toHaveCount(0);
+  await expect(page.getByText("No audit log entries found.")).toHaveCount(0);
+  await page.route("**/api/admin/audit-log?*", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "Audit service unavailable" },
+    }),
+  );
+  await page.getByRole("button", { name: "Refresh audit log" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Audit service unavailable",
+  );
+  await page.route("**/api/admin/audit-log?*", (route) =>
+    route.fulfill({ json: { available: true, total: 0, items: [] } }),
+  );
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByText("No audit log entries found.")).toBeVisible();
+  await expect(page.getByText("Showing 0 of 0 audit events")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("admin inbound log displays API records and supports limits, refresh and retry", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, {
+    admin: true,
+    inboundItems: [
+      {
+        id: "b1d4-log",
+        ses_message_id: "3fb2-message",
+        status: "delivered",
+        detail: { message: "delivered to the recipient mailbox" },
+        recipients: ["newuser@survill.com", "second@survill.com"],
+        processed_at: "2026-11-05T08:22:00.000Z",
+      },
+    ],
+  });
+  await login(page);
+  await page.goto("/admin/inbound-log");
+  const table = page.getByRole("table", { name: "Inbound log", exact: true });
+  for (const value of [
+    "b1d4-log",
+    "3fb2-message",
+    "delivered to the recipient mailbox",
+    "newuser@survill.com",
+    "second@survill.com",
+    "2026-11-05T08:22:00.000Z",
+  ])
+    await expect(table).toContainText(value);
+  const reads = () =>
+    calls.filter((call) => call.path === "/api/admin/inbound-log");
+  expect(reads().at(-1)).toMatchObject({
+    method: "GET",
+    params: { limit: "25" },
+  });
+  await page.getByLabel("Record limit").selectOption("50");
+  await expect.poll(() => reads().at(-1).params.limit).toBe("50");
+  await expect(table).toBeVisible();
+  const count = reads().length;
+  await page.getByRole("button", { name: "Refresh inbound log" }).click();
+  await expect.poll(() => reads().length).toBeGreaterThan(count);
+  await expect(table).toBeVisible();
+  await page.route("**/api/admin/inbound-log?*", (route) =>
+    route.fulfill({ status: 503, json: { error: "Inbound log unavailable" } }),
+  );
+  await page.getByRole("button", { name: "Refresh inbound log" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Inbound log unavailable",
+  );
+  await expect(table).toHaveCount(0);
+  await page.route("**/api/admin/inbound-log?*", (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(page.getByText("No inbound log entries found.")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
 test("admin groups create edit and delete use the supplied member contract", async ({
@@ -801,6 +1090,150 @@ test("admin API failures retain group edits and never show sample monitored mail
   await expect(page.getByRole("cell")).toHaveCount(0);
 });
 
+test("settings loads documented fields and patches only changed preferences", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, {
+    preferences: {
+      compactMessageList: true,
+      markAsReadWhenOpened: false,
+      confirmBeforeMovingToTrash: true,
+      messagesPerPage: 25,
+      useSignature: false,
+      signature: "Best Regards\nhr@onesintel.com",
+      customPreference: "keep me",
+    },
+  });
+  await login(page);
+  await page.goto("/settings");
+  await expect(page.getByLabel("Messages per page")).toHaveValue("25");
+  await expect(page.getByLabel("Compact message list")).toBeChecked();
+  await expect(page.getByLabel("Mark as read when opened")).not.toBeChecked();
+  await expect(page.getByLabel("Confirm before moving to Trash")).toBeChecked();
+  await expect(page.getByLabel("Use my signature")).not.toBeChecked();
+  await expect(page.getByLabel("Email signature")).toHaveValue(
+    "Best Regards\nhr@onesintel.com",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save preferences" }),
+  ).toBeDisabled();
+  expect(
+    calls.some((c) => c.path === "/api/settings" && c.method === "GET"),
+  ).toBe(true);
+  await page.getByLabel("Messages per page").selectOption("50");
+  await page.getByLabel("Use my signature").check();
+  await page.getByLabel("Email signature").fill("Regards\nHR");
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(
+    page.getByRole("button", { name: "Save preferences" }),
+  ).toBeDisabled();
+  expect(
+    calls.find((c) => c.path === "/api/settings" && c.method === "PATCH").body,
+  ).toEqual({
+    messagesPerPage: 50,
+    useSignature: true,
+    signature: "Regards\nHR",
+  });
+  expect(
+    calls.some((c) => c.path === "/api/profile" && c.method === "PATCH"),
+  ).toBe(false);
+  await page.reload();
+  await expect(page.getByLabel("Messages per page")).toHaveValue("50");
+  await expect(page.getByLabel("Email signature")).toHaveValue("Regards\nHR");
+  const preferences = await page.evaluate(async () => {
+    const { settingsApi } = await import("/src/api/settings.js");
+    return (await settingsApi.get()).preferences;
+  });
+  expect(preferences).toMatchObject({ customPreference: "keep me" });
+  await page.getByLabel("Email signature").fill("Unsaved");
+  await page.getByRole("button", { name: "Cancel changes" }).click();
+  await expect(page.getByLabel("Email signature")).toHaveValue("Regards\nHR");
+});
+
+test("settings load and save failures offer retry and preserve edits", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page);
+  let failRead = true;
+  let failSave = true;
+  await page.route("**/api/settings", (route) => {
+    if (
+      (route.request().method() === "GET" && failRead) ||
+      (route.request().method() === "PATCH" && failSave)
+    )
+      return route.fulfill({
+        status: 503,
+        json: { error: "Settings unavailable" },
+      });
+    return route.fallback();
+  });
+  await page.goto("/settings");
+  await expect(page.getByRole("alert")).toContainText("Settings unavailable");
+  await expect(
+    page.getByRole("button", { name: "Save preferences" }),
+  ).toHaveCount(0);
+  failRead = false;
+  await page.getByRole("button", { name: "Retry settings" }).click();
+  await page.getByLabel("Email signature").fill("Keep this edit");
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(page.getByRole("alert")).toContainText("Settings unavailable");
+  await expect(page.getByLabel("Email signature")).toHaveValue(
+    "Keep this edit",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save preferences" }),
+  ).toBeEnabled();
+  failSave = false;
+  await page.getByRole("button", { name: "Save preferences" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save preferences" }),
+  ).toBeDisabled();
+});
+
+test("settings thunks support replacement and partial updates with flat payloads", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { preferences: { oldCustom: true } });
+  await login(page);
+  const result = await page.evaluate(async () => {
+    const { store } = await import("/src/redux/store");
+    const { fetchSettings, saveSettings, replaceSettings } =
+      await import("/src/redux/thunks/settingsThunks.js");
+    await store.dispatch(fetchSettings()).unwrap();
+    await store
+      .dispatch(
+        replaceSettings({
+          messagesPerPage: 25,
+          signature: "Replacement",
+          useSignature: false,
+        }),
+      )
+      .unwrap();
+    const replaced = store.getState().settings.preferences;
+    await store.dispatch(saveSettings({ compactMessageList: true })).unwrap();
+    return { replaced, state: store.getState().settings };
+  });
+  expect(result.replaced).toEqual({
+    messagesPerPage: 25,
+    signature: "Replacement",
+    useSignature: false,
+  });
+  expect(result.state).toMatchObject({
+    compact: true,
+    pageSize: 25,
+    signature: "Replacement",
+    useSignature: false,
+  });
+  expect(
+    calls.find((c) => c.path === "/api/settings" && c.method === "PUT").body,
+  ).toEqual(result.replaced);
+  expect(
+    calls.find((c) => c.path === "/api/settings" && c.method === "PATCH").body,
+  ).toEqual({ compactMessageList: true });
+});
+
 test("profile and preferences are sent with documented payloads", async ({
   page,
 }) => {
@@ -829,8 +1262,9 @@ test("profile and preferences are sent with documented payloads", async ({
     .poll(() =>
       calls.some(
         (c) =>
-          c.path === "/api/profile" &&
-          c.body?.signatureHtml === "&lt;script&gt;not markup&lt;/script&gt;",
+          c.path === "/api/settings" &&
+          c.method === "PATCH" &&
+          c.body?.signature === "<script>not markup</script>",
       ),
     )
     .toBe(true);
@@ -893,8 +1327,8 @@ test("API adapter covers every documented JSON/multipart route and preserves wir
     await api.avatar(blob);
     await api.removeAvatar();
     await api.settings();
-    await api.saveSettings({ pageSize: 20 });
-    await api.saveSettings({ pageSize: 50 }, true);
+    await api.saveSettings({ messagesPerPage: 25 });
+    await api.saveSettings({ messagesPerPage: 50 }, true);
     await api.folders();
     await api.createFolder("Projects");
     await api.renameFolder(key, "Work");
@@ -926,9 +1360,6 @@ test("API adapter covers every documented JSON/multipart route and preserves wir
     }
     await api.suggest("query");
     await api.identify(["a@survill.com"]);
-    await api.domains();
-    await api.saveDomain({ domain: "example.com", name: "Example" });
-    await api.deleteDomain(key);
     await api.groups();
     await api.createGroup({
       name: "Team",
@@ -946,6 +1377,65 @@ test("API adapter covers every documented JSON/multipart route and preserves wir
       limit: 25,
     });
     await api.emailMonitoring({ q: "invoice", folder: "all", limit: 20 });
+    await api.adminOverview();
+    await api.adminOverviewSummary();
+    await api.adminReports();
+    await api.adminReportsSummary();
+    await api.adminSecurity();
+    await api.updateAdminSecurity({
+      requireMfa: false,
+      allowExternalForwarding: true,
+      allowImapAccess: true,
+      allowPopAccess: false,
+      sessionDurationMinutes: 60,
+      minimumPasswordLength: 12,
+      retentionPeriodDays: 365,
+    });
+    await api.adminDomains();
+    await api.createAdminDomain({ domain: "studio.co", name: "Studio domain" });
+    await api.updateAdminDomain(key, { name: "Updated Studio domain" });
+    await api.deleteAdminDomain(key);
+    await api.adminAliases();
+    await api.createAdminAlias({
+      email: "sales@survill.com",
+      userId: "user",
+      canSend: false,
+    });
+    await api.deleteAdminAlias(key);
+    await api.senderControls({ q: "example.com" });
+    await api.createSenderControl({
+      emailOrDomain: "example.com",
+      action: "block",
+      reason: "spam source",
+    });
+    await api.updateSenderControl(key, {
+      action: "allow",
+      reason: "verified sender",
+    });
+    await api.deleteSenderControl(key);
+    await api.routingRules({ q: "spam", status: "active" });
+    await api.createRoutingRule({
+      name: "Block spam",
+      matchField: "domain",
+      action: "block",
+      priority: 200,
+      status: "active",
+      criteria: { value: "example.com" },
+    });
+    await api.updateRoutingRule(key, { status: "paused", priority: 500 });
+    await api.deleteRoutingRule(key);
+    await api.stores();
+    await api.createStore({
+      name: "Downtown Hub",
+      code: "DTH-01",
+      location: "New York",
+      status: "active",
+    });
+    await api.updateStore(key, {
+      name: "Downtown Hub Updated",
+      status: "inactive",
+    });
+    await api.deleteStore(key);
     await api.users();
     await api.createUser({
       email: "a@survill.com",
@@ -976,7 +1466,12 @@ test("API adapter covers every documented JSON/multipart route and preserves wir
         .replace("/aliases/team%2Bone%40survill.com", "/aliases/:email")}`,
   );
   expect(new Set(normalized)).toEqual(
-    new Set(inventory.filter((p) => p !== "GET /api/files/:token")),
+    new Set(
+      inventory.filter(
+        (p) =>
+          p !== "GET /api/files/:token" && !p.includes("/api/known-domains"),
+      ),
+    ),
   );
   expect(requests.every((r) => r.credentials)).toBe(true);
   expect(
@@ -1163,4 +1658,291 @@ test("an older workspace list cannot overwrite a confirmed save", async ({
   expect(notes).toEqual([
     expect.objectContaining({ title: "Latest confirmed note" }),
   ]);
+});
+
+test("admin domains use server CRUD without simulated verification", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/domains");
+  await expect(page.getByText("Primary domain: studio.co")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Verify|DKIM|Make primary/ }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Create domain", exact: true })
+    .click();
+  await page.getByLabel("Domain", { exact: true }).fill("example.org");
+  await page.getByLabel("Domain name", { exact: true }).fill("Example domain");
+  await page.getByRole("button", { name: "Save domain" }).click();
+  await page.getByRole("button", { name: "Edit Example domain" }).click();
+  await expect(page.getByLabel("Domain", { exact: true })).toBeDisabled();
+  await page.getByLabel("Domain name", { exact: true }).fill("Updated domain");
+  await page.getByRole("button", { name: "Save domain" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Updated domain" }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.method === "POST" && c.path === "/api/admin/domains")
+      .body,
+  ).toEqual({ domain: "example.org", name: "Example domain" });
+  expect(
+    calls.find(
+      (c) => c.method === "PATCH" && c.path === "/api/admin/domains/domains-2",
+    ).body,
+  ).toEqual({ name: "Updated domain" });
+  await page.getByRole("button", { name: "Delete Updated domain" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Updated domain" }),
+  ).toHaveCount(0);
+});
+
+test("admin aliases select a real user and delete by alias ID", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/aliases");
+  await page.getByRole("button", { name: "Create alias", exact: true }).click();
+  await page.getByLabel("Alias email").fill("help@survill.com");
+  await page.getByLabel("Mailbox user", { exact: true }).selectOption(userId);
+  await page.getByLabel("Allow sending").uncheck();
+  await page.getByRole("button", { name: "Save alias" }).click();
+  await expect(
+    page.getByRole("button", { name: "Delete help@survill.com" }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.method === "POST" && c.path === "/api/admin/aliases")
+      .body,
+  ).toEqual({ email: "help@survill.com", userId, canSend: false });
+  await page.getByRole("button", { name: "Delete help@survill.com" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(
+    page.getByRole("button", { name: "Delete help@survill.com" }),
+  ).toHaveCount(0);
+  expect(
+    calls.some(
+      (c) => c.method === "DELETE" && c.path === "/api/admin/aliases/aliases-2",
+    ),
+  ).toBe(true);
+  expect(calls.some((c) => c.path.includes(`/users/${userId}/aliases`))).toBe(
+    false,
+  );
+});
+
+test("admin routing preserves criteria and serializes priority and filters", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/routing");
+  await page.getByLabel("Search mail routing").fill("spam");
+  await page.getByLabel("Routing status filter").selectOption("active");
+  await page.getByRole("button", { name: "Apply filters" }).click();
+  await expect
+    .poll(
+      () =>
+        calls
+          .filter((c) => c.method === "GET" && c.path === "/api/admin/routing")
+          .at(-1)?.params,
+    )
+    .toEqual({ q: "spam", status: "active" });
+  await page.getByRole("button", { name: "Create rule", exact: true }).click();
+  await page.getByLabel("Rule name").fill("Block example");
+  await page
+    .getByLabel("Criteria (JSON)")
+    .fill('{"value":"example.org","extra":"preserved"}');
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await page.getByRole("button", { name: "Edit Block example" }).click();
+  await page.getByLabel("Priority", { exact: true }).fill("500");
+  await page.getByLabel("Status", { exact: true }).selectOption("paused");
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Block example" }),
+  ).toBeVisible();
+  const update = calls.find(
+    (c) => c.method === "PATCH" && c.path === "/api/admin/routing/routing-2",
+  );
+  expect(update.body).toEqual({
+    name: "Block example",
+    matchField: "domain",
+    action: "block",
+    priority: 500,
+    status: "paused",
+    criteria: { value: "example.org", extra: "preserved" },
+  });
+  await page.getByRole("button", { name: "Delete Block example" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit Block example" }),
+  ).toHaveCount(0);
+});
+
+test("admin stores use API records without local employee memberships", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/stores");
+  await page.getByRole("button", { name: "Create store", exact: true }).click();
+  await page.getByLabel("Store name").fill("North Hub");
+  await page.getByLabel("Store code").fill("NH-01");
+  await page.getByLabel("Location", { exact: true }).fill("Mumbai");
+  await page.getByRole("button", { name: "Save store" }).click();
+  await page.getByRole("button", { name: "Edit North Hub" }).click();
+  await page.getByLabel("Status", { exact: true }).selectOption("inactive");
+  await page.getByRole("button", { name: "Save store" }).click();
+  await expect(
+    page.getByRole("cell", { name: "inactive", exact: true }),
+  ).toBeVisible();
+  expect(
+    calls.find((c) => c.method === "POST" && c.path === "/api/admin/stores")
+      .body,
+  ).toEqual({
+    name: "North Hub",
+    code: "NH-01",
+    location: "Mumbai",
+    status: "active",
+  });
+  await page.getByRole("button", { name: "Delete North Hub" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit North Hub" }),
+  ).toHaveCount(0);
+  expect(calls.some((c) => c.path.includes("/employees"))).toBe(false);
+});
+
+test("admin overview reports and security use server data and exact policy fields", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/overview");
+  await expect(page.getByText("Latest server activity")).toBeVisible();
+  for (const label of ["Sender controls", "Organization", "Known domains"])
+    await expect(
+      page
+        .getByRole("navigation", { name: "Administration", exact: true })
+        .getByRole("link", { name: label, exact: true }),
+    ).toHaveCount(0);
+  await page.getByRole("link", { name: "Reports", exact: true }).click();
+  await expect(
+    page.getByText("Delivery telemetry not configured."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Server telemetry is unavailable."),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Security & retention", exact: true })
+    .click();
+  await page.getByLabel("Require multi-factor authentication").uncheck();
+  await page.getByLabel("Allow external forwarding").check();
+  await page.getByLabel("Session duration (minutes)").fill("90");
+  await page.getByRole("button", { name: "Save configuration" }).click();
+  await expect(page.getByText("Security settings saved.")).toBeVisible();
+  await expect(page.getByLabel("Session duration (minutes)")).toHaveValue("90");
+  expect(
+    calls.find((c) => c.path === "/api/admin/security" && c.method === "PATCH")
+      .body,
+  ).toEqual({
+    requireMfa: false,
+    allowExternalForwarding: true,
+    allowImapAccess: true,
+    allowPopAccess: false,
+    sessionDurationMinutes: 90,
+    minimumPasswordLength: 12,
+    retentionPeriodDays: 365,
+  });
+});
+
+test("admin resource failures preserve editor and report errors without demo fallback", async ({
+  page,
+}) => {
+  await mockApi(page, { admin: true, adminWriteFails: true });
+  await login(page);
+  await page.goto("/admin/domains");
+  await page.getByRole("button", { name: "Edit Studio domain" }).click();
+  await page.getByLabel("Domain name", { exact: true }).fill("Keep my changes");
+  await page.getByRole("button", { name: "Save domain" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Admin change rejected",
+  );
+  await expect(page.getByLabel("Domain name", { exact: true })).toHaveValue(
+    "Keep my changes",
+  );
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Delete Studio domain" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Admin change rejected",
+  );
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.goto("/admin/security");
+  await page.getByLabel("Session duration (minutes)").fill("75");
+  await page.getByRole("button", { name: "Save configuration" }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Security update rejected",
+  );
+  await expect(page.getByLabel("Session duration (minutes)")).toHaveValue("75");
+  await page.route("**/api/admin/stores", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "Store service unavailable" },
+    }),
+  );
+  await page.goto("/admin/stores");
+  await expect(page.getByRole("alert")).toContainText(
+    "Store service unavailable",
+  );
+  await expect(page.getByRole("cell")).toHaveCount(0);
+});
+
+test("admin resource thunk lifecycle rejects stale reads after a confirmed write", async ({
+  page,
+}) => {
+  await mockApi(page, { admin: true });
+  await login(page);
+  const result = await page.evaluate(async () => {
+    const { store } = await import("/src/redux/store.js");
+    const {
+      fetchStores,
+      createStore,
+      fetchSenderControls,
+      fetchAdminOverviewSummary,
+      fetchAdminReportsSummary,
+    } = await import("/src/redux/thunks/adminThunks.js");
+    await store.dispatch(fetchSenderControls({ q: "example.com" })).unwrap();
+    await store.dispatch(fetchAdminOverviewSummary()).unwrap();
+    await store.dispatch(fetchAdminReportsSummary()).unwrap();
+    const before = await store.dispatch(fetchStores()).unwrap();
+    store.dispatch(fetchStores.pending("old-request", undefined));
+    store.dispatch(
+      createStore.fulfilled({ item: { id: "new" } }, "write-request", {}),
+    );
+    store.dispatch(
+      fetchStores.fulfilled(
+        { items: [{ id: "stale" }] },
+        "old-request",
+        undefined,
+      ),
+    );
+    const stale = store.getState().admin.data[fetchStores.typePrefix];
+    await store.dispatch(fetchStores()).unwrap();
+    return {
+      before: before.items[0].id,
+      stale: stale ?? null,
+      status: store.getState().admin.requests[fetchStores.typePrefix].status,
+      summary:
+        store.getState().admin.data[fetchAdminOverviewSummary.typePrefix]
+          .workspaceSetup.directoryReady,
+    };
+  });
+  expect(result).toEqual({
+    before: "store-1",
+    stale: null,
+    status: "succeeded",
+    summary: true,
+  });
 });
