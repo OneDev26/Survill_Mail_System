@@ -1,4 +1,5 @@
 import { Provider, useSelector } from "react-redux";
+import { lazy, Suspense } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -11,12 +12,19 @@ import LoginPage from "./pages/LoginPage";
 import MailPage from "./pages/MailPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import DirectoryPage from "./pages/companyMail/DirectoryPage";
+import TimedMailPage from "./pages/companyMail/TimedMailPage";
+import ApprovalsPage from "./pages/companyMail/ApprovalsPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import AdminPage from "./pages/AdminConsole";
 import AppLayout from "./components/AppLayout";
 import SessionGate from "./components/SessionGate";
 import Notifications from "./components/Notifications";
 import { canAdminister, sessionUser } from "./utils/access";
+
+const SharedMailboxesPage = lazy(
+  () => import("./pages/companyMail/SharedMailboxesPage"),
+);
 
 function ProtectedRoute() {
   return useSelector(sessionUser) ? (
@@ -45,6 +53,30 @@ export default function App() {
                 <Route path="mail/:folder" element={<MailPage />} />
                 <Route path="profile" element={<ProfilePage />} />
                 <Route path="settings" element={<SettingsPage />} />
+                <Route path="directory" element={<DirectoryPage />} />
+                <Route
+                  path="shared-mailboxes"
+                  element={
+                    <Suspense
+                      fallback={
+                        <p role="status" className="p-6">
+                          Loading shared inbox…
+                        </p>
+                      }
+                    >
+                      <SharedMailboxesPage />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="scheduled"
+                  element={<TimedMailPage key="scheduled" kind="scheduled" />}
+                />
+                <Route
+                  path="snoozed"
+                  element={<TimedMailPage key="snoozed" kind="snoozed" />}
+                />
+                <Route path="approvals" element={<ApprovalsPage />} />
                 {["contacts", "tasks", "notes", "calendar"].map((kind) => (
                   <Route
                     key={kind}

@@ -6,6 +6,14 @@ import settings from "./slice/settingsSlice";
 import workspace from "./slice/workspaceSlice";
 import ui from "./slice/uiSlice";
 import admin from "./slice/adminSlice";
+import sharedMailboxDrafts from "./slice/sharedMailboxDraftsSlice";
+import {
+  directory,
+  shared,
+  scheduled,
+  snoozed,
+  approvals,
+} from "./slice/companyMailSlices";
 import { logout } from "./thunks/authThunks";
 
 const combined = combineReducers({
@@ -16,6 +24,12 @@ const combined = combineReducers({
   workspace,
   ui,
   admin,
+  sharedMailboxDrafts,
+  directory,
+  shared,
+  scheduled,
+  snoozed,
+  approvals,
 });
 export function rootReducer(state, action) {
   if (sessionExpired.match(action) || logout.fulfilled.match(action)) {

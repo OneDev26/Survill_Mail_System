@@ -24,9 +24,12 @@ export default function AppLayout() {
     ? "Mail"
     : location.pathname.startsWith("/admin")
       ? "Administration"
-      : location.pathname.slice(1);
+      : location.pathname.slice(1).replaceAll("-", " ");
   function search(value) {
-    if (!location.pathname.startsWith("/mail/")) {
+    if (
+      !location.pathname.startsWith("/mail/") &&
+      location.pathname !== "/shared-mailboxes"
+    ) {
       navigate(`/mail/Inbox?q=${encodeURIComponent(value)}`);
       return;
     }
@@ -75,8 +78,10 @@ export default function AppLayout() {
               calendar.
             </p>
             <p>
-              Changes are saved to your mail server. Closing a message saves it
-              in Drafts. Use Refresh mailbox to check for new mail.
+              Mailbox changes are saved to your mail server. Closing the
+              composer saves its draft. Use Refresh mailbox to check for new
+              mail. Pages marked Preview service save records to the server, but
+              those records may reset when the service restarts.
             </p>
             <button className="btn-primary" onClick={() => setHelp(false)}>
               Got it

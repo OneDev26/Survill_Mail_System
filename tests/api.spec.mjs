@@ -22,8 +22,57 @@ const userId = "11111111-1111-4111-8111-111111111111";
 const messageId = "22222222-2222-4222-8222-222222222222";
 const draftId = "33333333-3333-4333-8333-333333333333";
 const attachmentId = "44444444-4444-4444-8444-444444444444";
+const companyRecords = {
+  "shared-mailboxes": {
+    id: "mb-1",
+    mailbox: "support@example.com",
+    conversation: "sales@example.com",
+    status: "pending",
+    requests: 0,
+    access: "Open",
+    note: "Delivery update requested",
+  },
+  scheduled: {
+    id: "sched-1",
+    subject: "Server scheduled message",
+    to: "team@example.com",
+    body: "Scheduled body",
+    scheduledFor: "2099-11-07T10:00:00.000Z",
+    status: "scheduled",
+  },
+  snoozed: {
+    id: "snooze-1",
+    subject: "Server snoozed message",
+    from: "supplier@example.com",
+    body: "Snoozed body",
+    snoozedUntil: "2099-11-07T10:30:00.000Z",
+    status: "snoozed",
+  },
+  "company-directory": {
+    id: "emp-1",
+    name: "Asha Rao",
+    title: "HR Manager",
+    department: "Human Resources",
+    office: "Head Office",
+    email: "asha@example.com",
+  },
+  approvals: {
+    id: "apr-1",
+    title: "Office equipment request",
+    requester: "Rohan Mehta",
+    details: "Purchase - Rahul Menta",
+    amount: "₹ 1,240.00",
+    status: "pending",
+  },
+};
 async function mockApi(page, options = {}) {
   const calls = [];
+  const companyRows = Object.fromEntries(
+    Object.entries(companyRecords).map(([key, item]) => [
+      key,
+      [structuredClone(item)],
+    ]),
+  );
   const user = {
     id: userId,
     email: "test@survill.com",
@@ -174,6 +223,43 @@ async function mockApi(page, options = {}) {
     });
     const json = (data, status = 200) => route.fulfill({ status, json: data });
     const empty = () => route.fulfill({ status: 204 });
+    const [, , companyKind, companyId] = path.split("/");
+    if (companyRows[companyKind]) {
+      if (options.companyReadFails && method === "GET")
+        return json({ error: "Workspace unavailable" }, 503);
+      if (options.companyWriteFails && method !== "GET")
+        return json({ error: "Workspace update rejected" }, 403);
+      if (method === "GET")
+        return json({
+          items: companyRows[companyKind],
+          total: companyRows[companyKind].length,
+          ...(companyKind === "shared-mailboxes" ? { filter: "all" } : {}),
+        });
+      if (method === "POST") {
+        const item = {
+          ...body,
+          id: `${companyKind}-created`,
+          ...(companyKind === "shared-mailboxes" ? { requests: 0 } : {}),
+        };
+        companyRows[companyKind].push(item);
+        return json({ item }, 201);
+      }
+      if (method === "PATCH") {
+        Object.assign(
+          companyRows[companyKind].find(
+            (item) => item.id === decodeURIComponent(companyId),
+          ),
+          body,
+        );
+        return empty();
+      }
+      if (method === "DELETE") {
+        companyRows[companyKind] = companyRows[companyKind].filter(
+          (item) => item.id !== decodeURIComponent(companyId),
+        );
+        return empty();
+      }
+    }
     if (["/api/admin/overview", "/api/admin/overview/summary"].includes(path))
       return json({
         mailSummary: {
@@ -390,7 +476,10 @@ async function mockApi(page, options = {}) {
     if (path === "/api/messages" && method === "GET")
       return json({
         items:
-          message.folderId === url.searchParams.get("folder") ? [message] : [],
+          url.searchParams.get("folder") === "all" ||
+          message.folderId === url.searchParams.get("folder")
+            ? [message]
+            : [],
         total: 1,
         page: Number(url.searchParams.get("page")),
         pageSize: Number(url.searchParams.get("pageSize")),
@@ -531,6 +620,354 @@ async function login(page) {
     page.getByRole("button", { name: /Verified Sender/ }),
   ).toBeVisible();
 }
+
+test("shared inbox separates reply drafts scopes search and supports mobile navigation without simulated sending", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.route("**/api/shared-mailboxes", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          companyRecords["shared-mailboxes"],
+          {
+            id: "mb-2",
+            mailbox: "hr@example.com",
+            conversation: "candidate@example.com",
+            status: "approved",
+            requests: 2,
+            access: "Restricted",
+            note: "Interview availability",
+          },
+        ],
+        total: 2,
+      },
+    }),
+  );
+  await page.goto("/shared-mailboxes");
+  const list = page.getByRole("region", {
+    name: "Conversation list",
+    exact: true,
+  });
+  const draft = page.getByLabel("Shared mailbox reply", { exact: true });
+  await draft.fill("Reply for sales");
+  await list.getByRole("button", { name: /candidate@example.com/ }).click();
+  await expect(draft).toHaveValue("");
+  await draft.fill("Reply for candidate");
+  await list.getByRole("button", { name: /sales@example.com/ }).click();
+  await expect(draft).toHaveValue("Reply for sales");
+  await expect(
+    page.getByRole("button", { name: "Send reply", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("This is a record note, not an email message."),
+  ).toBeVisible();
+  await page.getByLabel("Search mail", { exact: true }).fill("Interview");
+  await expect(page).toHaveURL(/\/shared-mailboxes\?q=Interview$/);
+  await expect(
+    list.getByRole("button", { name: /sales@example.com/ }),
+  ).toHaveCount(0);
+  await page.getByLabel("Search conversations").fill("");
+  await list.getByRole("button", { name: /sales@example.com/ }).click();
+  await page.screenshot({
+    path: "test-results/shared-inbox-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(draft).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(list).toBeVisible();
+  await page.getByLabel("Choose mailbox").selectOption("hr@example.com");
+  await list.getByRole("button", { name: /candidate@example.com/ }).click();
+  await expect(draft).toHaveValue("Reply for candidate");
+  await page.screenshot({
+    path: "test-results/shared-inbox-mobile.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByRole("button", { name: "Discard draft", exact: true })
+    .click();
+  await expect(draft).toHaveValue("");
+  expect(calls.some((call) => /\/send$|\/replies$/.test(call.path))).toBe(
+    false,
+  );
+  await page.reload();
+  await list.getByRole("button", { name: /sales@example.com/ }).click();
+  await expect(draft).toHaveValue("");
+});
+
+test("workspace tabs shared mailbox and directory use documented server fields", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/shared-mailboxes");
+  await expect(
+    page.getByRole("region", { name: "Conversation workspace", exact: true }),
+  ).toContainText("sales@example.com");
+  await expect(
+    page.getByRole("region", { name: "Conversation workspace", exact: true }),
+  ).toContainText("Delivery update requested");
+  await expect(
+    page.getByRole("button", { name: /assign|resolve/i }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Status", { exact: true }).selectOption("approved");
+  await dialog.getByLabel("Access", { exact: true }).selectOption("Restricted");
+  await dialog.getByRole("button", { name: "Save conversation" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Conversation workspace", exact: true }),
+  ).toContainText("Restricted");
+  expect(
+    calls.find(
+      (c) => c.path === "/api/shared-mailboxes/mb-1" && c.method === "PATCH",
+    ).body,
+  ).toEqual({ status: "approved", access: "Restricted" });
+  await page.getByRole("button", { name: "New conversation" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Mailbox", { exact: true }).fill("hr@example.com");
+  await dialog
+    .getByLabel("Contact email", { exact: true })
+    .fill("candidate@example.com");
+  await dialog
+    .getByLabel("Context note", { exact: true })
+    .fill("Interview availability");
+  await dialog.getByRole("button", { name: "Save conversation" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find((c) => c.path === "/api/shared-mailboxes" && c.method === "POST")
+      .body,
+  ).toEqual({
+    mailbox: "hr@example.com",
+    conversation: "candidate@example.com",
+    note: "Interview availability",
+    access: "Open",
+    status: "pending",
+  });
+  await page.goto("/directory");
+  await expect(page.getByRole("article")).toContainText("Head Office");
+  await page.getByRole("button", { name: "Edit record" }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Office", { exact: true }).fill("Mumbai Office");
+  await dialog.getByRole("button", { name: "Save record" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find(
+      (c) => c.path === "/api/company-directory/emp-1" && c.method === "PATCH",
+    ).body,
+  ).toEqual({ office: "Mumbai Office" });
+  await page.getByRole("button", { name: "Create record" }).click();
+  dialog = page.getByRole("dialog");
+  for (const [label, value] of [
+    ["Name", "New Employee"],
+    ["Job title", "Manager"],
+    ["Department", "Operations"],
+    ["Office", "Delhi"],
+    ["Email", "employee@example.com"],
+  ])
+    await dialog.getByLabel(label, { exact: true }).fill(value);
+  await dialog.getByRole("button", { name: "Save record" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find(
+      (c) => c.path === "/api/company-directory" && c.method === "POST",
+    ).body,
+  ).toEqual({
+    name: "New Employee",
+    title: "Manager",
+    department: "Operations",
+    office: "Delhi",
+    email: "employee@example.com",
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("article").filter({ hasText: "New Employee" }),
+  ).toBeVisible();
+});
+
+for (const kind of ["scheduled", "snoozed"]) {
+  test(`workspace tabs ${kind} create transition and delete use exact contracts`, async ({
+    page,
+  }) => {
+    const { calls } = await mockApi(page);
+    await login(page);
+    await page.goto(`/${kind}`);
+    const scheduling = kind === "scheduled";
+    await expect(page.getByRole("article")).toContainText(
+      scheduling ? "team@example.com" : "supplier@example.com",
+    );
+    await page.getByRole("button", { name: "Create record" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByLabel("Subject", { exact: true })
+      .fill("New server record");
+    await dialog
+      .getByLabel(scheduling ? "Recipient" : "Sender", { exact: true })
+      .fill("person@example.com");
+    await dialog.getByLabel("Message", { exact: true }).fill("Saved message");
+    const time = dialog.getByLabel(scheduling ? "Send at" : "Return at", {
+      exact: true,
+    });
+    await time.fill("2020-01-01T09:00");
+    await dialog.getByRole("button", { name: "Save record" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("future date");
+    await time.fill("2099-01-01T09:00");
+    await dialog.getByRole("button", { name: "Save record" }).click();
+    await expect(dialog).toHaveCount(0);
+    const payload = calls.find(
+      (c) => c.path === `/api/${kind}` && c.method === "POST",
+    ).body;
+    const timeKey = scheduling ? "scheduledFor" : "snoozedUntil";
+    expect(payload).toEqual({
+      subject: "New server record",
+      [scheduling ? "to" : "from"]: "person@example.com",
+      body: "Saved message",
+      [timeKey]: expect.any(String),
+      status: kind,
+    });
+    expect(payload[timeKey]).toBe(
+      await page.evaluate(() => new Date("2099-01-01T09:00").toISOString()),
+    );
+    const card = page
+      .getByRole("article")
+      .filter({ hasText: "New server record" });
+    await card
+      .getByRole("button", {
+        name: scheduling ? "Cancel schedule" : "Mark active",
+      })
+      .click();
+    await expect(card).toContainText(scheduling ? "cancelled" : "active");
+    expect(
+      calls.find(
+        (c) =>
+          c.path === `/api/${kind}/${kind}-created` && c.method === "PATCH",
+      ).body,
+    ).toEqual({ status: scheduling ? "cancelled" : "active" });
+    await card.getByRole("button", { name: "Delete record" }).click();
+    await page.getByRole("button", { name: "Confirm delete" }).click();
+    await expect(card).toHaveCount(0);
+    expect(
+      calls.some(
+        (c) =>
+          c.path === `/api/${kind}/${kind}-created` && c.method === "DELETE",
+      ),
+    ).toBe(true);
+    expect(calls.some((c) => /\/send$/.test(c.path))).toBe(false);
+  });
+}
+
+test("workspace tabs approvals preserve formatted amounts and approve server records", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.goto("/approvals");
+  await expect(page.getByRole("article")).toContainText("₹ 1,240.00");
+  await expect(page.getByRole("article")).toContainText(
+    "Purchase - Rahul Menta",
+  );
+  await expect(
+    page.getByRole("button", { name: /reject|withdraw/i }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Create record" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Request title").fill("Travel request");
+  await dialog
+    .getByLabel("Details", { exact: true })
+    .fill("Visit Mumbai office");
+  await dialog.getByLabel("Amount (formatted text)").fill("₹ 5,000.00");
+  await dialog.getByRole("button", { name: "Save record" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find((c) => c.path === "/api/approvals" && c.method === "POST").body,
+  ).toEqual({
+    title: "Travel request",
+    requester: "Test User",
+    details: "Visit Mumbai office",
+    amount: "₹ 5,000.00",
+    status: "pending",
+  });
+  const card = page.getByRole("article").filter({ hasText: "Travel request" });
+  await card.getByRole("button", { name: "Approve request" }).click();
+  await expect(card).toContainText("approved");
+  expect(
+    calls.find(
+      (c) =>
+        c.path === "/api/approvals/approvals-created" && c.method === "PATCH",
+    ).body,
+  ).toEqual({ status: "approved" });
+});
+
+test("workspace tabs failure retry retains edits and never substitutes demo records", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  let failRead = true;
+  let failWrite = true;
+  await page.route("**/api/shared-mailboxes", (route) => {
+    if (route.request().method() === "GET" && failRead)
+      return route.fulfill({
+        status: 503,
+        json: { error: "Service unavailable" },
+      });
+    if (route.request().method() === "POST" && failWrite)
+      return route.fulfill({ status: 403, json: { error: "Not permitted" } });
+    return route.fallback();
+  });
+  await page.goto("/shared-mailboxes");
+  await expect(page.getByRole("alert")).toContainText("Service unavailable");
+  await expect(page.getByRole("article")).toHaveCount(0);
+  failRead = false;
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await page.getByRole("button", { name: "New conversation" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Mailbox", { exact: true }).fill("new@example.com");
+  await dialog
+    .getByLabel("Contact email", { exact: true })
+    .fill("sender@example.com");
+  await dialog
+    .getByLabel("Context note", { exact: true })
+    .fill("Keep my input");
+  await dialog.getByRole("button", { name: "Save conversation" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Not permitted");
+  await expect(dialog.getByLabel("Context note", { exact: true })).toHaveValue(
+    "Keep my input",
+  );
+  failWrite = false;
+  failRead = true;
+  await dialog.getByRole("button", { name: "Save conversation" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText(
+    "Changes were saved, but the list could not be refreshed",
+  );
+  failRead = false;
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Conversation list", exact: true })
+      .getByRole("button")
+      .filter({ hasText: "Keep my input" }),
+  ).toBeVisible();
+  expect(
+    calls.filter(
+      (c) => c.path === "/api/shared-mailboxes" && c.method === "POST",
+    ),
+  ).toHaveLength(1);
+  await page.goto("/directory");
+  await expect(page.getByRole("article")).toContainText("Asha Rao");
+  await expect(page.getByRole("button", { name: "Create record" })).toHaveCount(
+    0,
+  );
+});
 
 test("authentication, cookie restoration, logout, and no browser persistence", async ({
   page,

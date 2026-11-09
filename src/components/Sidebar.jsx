@@ -20,12 +20,19 @@ import {
   Trash2,
   Users,
   X,
+  Clock,
+  AlarmClock,
+  Building2,
+  UsersRound,
+  ClipboardCheck,
 } from "lucide-react";
+import { canAdminister } from "../utils/access";
 import { Avatar, IconButton } from "./Ui";
 import { initials } from "../utils/mail";
 import { folderName } from "../api/models";
 const folders = [
   ["Inbox", Inbox],
+  ["All Mail", Mail],
   ["Starred", Star],
   ["Drafts", FileText],
   ["Sent", Send],
@@ -41,11 +48,12 @@ const workspaces = [
 ];
 const tools = [
   ["Mail Rules", ListFilter, "/admin/routing"],
-  ["Mail Analytics", ChartNoAxesColumn, "/admin/audit"],
+  ["Mail Analytics", ChartNoAxesColumn, "/admin/reports"],
   ["Security", ShieldCheck, "/admin/security"],
   ["Settings", Settings, "/settings"],
 ];
 export default function Sidebar({ onCompose, open, onClose }) {
+  const isAdmin = useSelector(canAdminister);
   const { labels, customFolders } = useSelector((state) => state.mail);
   const profile = useSelector((state) => state.profile);
   const serverMail = useSelector((state) => state.mail);
@@ -122,6 +130,20 @@ export default function Sidebar({ onCompose, open, onClose }) {
               },
             )}
           </nav>
+          <nav aria-label="Company mail" className="mt-3 space-y-0.5">
+            {[
+              ["Shared Mailboxes", UsersRound, "/shared-mailboxes"],
+              ["Scheduled", Clock, "/scheduled"],
+              ["Snoozed", AlarmClock, "/snoozed"],
+              ["Company Directory", Building2, "/directory"],
+              ["Approvals", ClipboardCheck, "/approvals"],
+            ].map(([label, Icon, to]) => (
+              <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
+                <Icon size={17} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
           <div className="mb-2 mt-5 flex items-center justify-between px-3 text-[10px] font-semibold tracking-widest text-slate-400">
             LABELS
             <Link
@@ -166,17 +188,19 @@ export default function Sidebar({ onCompose, open, onClose }) {
             TOOLS &amp; SETTINGS
           </div>
           <nav aria-label="Tools and settings" className="space-y-0.5">
-            {tools.map(([name, Icon, to]) => (
-              <NavLink
-                key={name}
-                to={to}
-                onClick={onClose}
-                className={linkClass}
-              >
-                <Icon size={17} strokeWidth={1.7} />
-                {name}
-              </NavLink>
-            ))}
+            {tools
+              .filter(([, , to]) => !to.startsWith("/admin/") || isAdmin)
+              .map(([name, Icon, to]) => (
+                <NavLink
+                  key={name}
+                  to={to}
+                  onClick={onClose}
+                  className={linkClass}
+                >
+                  <Icon size={17} strokeWidth={1.7} />
+                  {name}
+                </NavLink>
+              ))}
           </nav>
         </div>
         <div className="px-6 py-3 text-[10px] text-slate-400">

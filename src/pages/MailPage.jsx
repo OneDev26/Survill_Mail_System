@@ -44,9 +44,11 @@ function Mailbox({ folder, query }) {
   const [confirm, setConfirm] = useState(null);
   const [version, setVersion] = useState(0);
   const folderId =
-    folder === "Starred"
-      ? "starred"
-      : mail.folders.find((f) => folderName(f) === folder)?.id;
+    folder === "All Mail"
+      ? "all"
+      : folder === "Starred"
+        ? "starred"
+        : mail.folders.find((f) => folderName(f) === folder)?.id;
   const labelId = folder.startsWith("label:")
     ? mail.labels.find((l) => l.name === folder.slice(6))?.id
     : undefined;

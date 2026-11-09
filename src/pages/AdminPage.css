@@ -40,16 +40,6 @@
   border-radius: 7px;
   background: #f4f1ff;
 }
-.admin-demo-note {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 11px 30px;
-  background: #fffbeb;
-  color: #846129;
-  font-size: 11px;
-  line-height: 1.6;
-}
 .admin-nav {
   display: flex;
   flex-wrap: wrap;
@@ -431,9 +421,6 @@
   }
   .admin-owner {
     display: none;
-  }
-  .admin-demo-note {
-    padding: 10px 16px;
   }
   .admin-nav {
     padding: 10px;
@@ -1047,12 +1034,6 @@
   align-items: center;
   gap: 5px;
   color: #6d4cc4;
-  font-size: 10px;
-}
-.admin-domain-demo-note {
-  align-self: center;
-  margin-right: auto;
-  color: #9297a7;
   font-size: 10px;
 }
 @media (max-width: 1100px) {
