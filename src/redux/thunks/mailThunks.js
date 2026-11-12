@@ -19,6 +19,9 @@ export const fetchMessage = createApiThunk(
 export const bulkUpdateMessages = createApiThunk("mail/bulkUpdate", (body) =>
   backend.bulk(body),
 );
+export const markFolderRead = createApiThunk("mail/markFolderRead", (id) =>
+  backend.markFolderRead(id),
+);
 export const deleteMessages = createApiThunk("mail/deleteMessages", (ids) =>
   backend.deleteMessages(ids),
 );

@@ -3,17 +3,13 @@ import { NavLink, Link } from "react-router-dom";
 import {
   Archive,
   CalendarDays,
-  ChartNoAxesColumn,
   CheckCheck,
   FileText,
   Folder,
   Inbox,
-  ListFilter,
   Mail,
   PenLine,
   Send,
-  Settings,
-  ShieldCheck,
   ShieldAlert,
   Star,
   StickyNote,
@@ -26,7 +22,6 @@ import {
   UsersRound,
   ClipboardCheck,
 } from "lucide-react";
-import { canAdminister } from "../utils/access";
 import { Avatar, IconButton } from "./Ui";
 import { initials } from "../utils/mail";
 import { folderName } from "../api/models";
@@ -46,15 +41,8 @@ const workspaces = [
   ["notes", StickyNote],
   ["calendar", CalendarDays],
 ];
-const tools = [
-  ["Mail Rules", ListFilter, "/admin/routing"],
-  ["Mail Analytics", ChartNoAxesColumn, "/admin/reports"],
-  ["Security", ShieldCheck, "/admin/security"],
-  ["Settings", Settings, "/settings"],
-];
 export default function Sidebar({ onCompose, open, onClose }) {
-  const isAdmin = useSelector(canAdminister);
-  const { labels, customFolders } = useSelector((state) => state.mail);
+  const { customFolders } = useSelector((state) => state.mail);
   const profile = useSelector((state) => state.profile);
   const serverMail = useSelector((state) => state.mail);
   const linkClass = ({ isActive }) =>
@@ -130,7 +118,10 @@ export default function Sidebar({ onCompose, open, onClose }) {
               },
             )}
           </nav>
-          <nav aria-label="Company mail" className="mt-3 space-y-0.5">
+          <div className="mb-2 mt-5 px-3 text-[10px] font-semibold tracking-widest text-slate-400">
+            COMPANY MAIL
+          </div>
+          <nav aria-label="Company mail" className="space-y-0.5">
             {[
               ["Shared Mailboxes", UsersRound, "/shared-mailboxes"],
               ["Scheduled", Clock, "/scheduled"],
@@ -141,30 +132,6 @@ export default function Sidebar({ onCompose, open, onClose }) {
               <NavLink key={to} to={to} onClick={onClose} className={linkClass}>
                 <Icon size={17} />
                 <span>{label}</span>
-              </NavLink>
-            ))}
-          </nav>
-          <div className="mb-2 mt-5 flex items-center justify-between px-3 text-[10px] font-semibold tracking-widest text-slate-400">
-            LABELS
-            <Link
-              to="/settings#organization"
-              onClick={onClose}
-              aria-label="Manage folders and labels"
-              className="text-lg hover:text-brand-600"
-            >
-              +
-            </Link>
-          </div>
-          <nav aria-label="Labels" className="space-y-0.5">
-            {labels.map((label) => (
-              <NavLink
-                key={label.name}
-                to={`/mail/${encodeURIComponent("label:" + label.name)}`}
-                onClick={onClose}
-                className={linkClass}
-              >
-                <span className={`size-2 shrink-0 rounded-full ${label.dot}`} />
-                <span className="truncate">{label.name}</span>
               </NavLink>
             ))}
           </nav>
@@ -183,24 +150,6 @@ export default function Sidebar({ onCompose, open, onClose }) {
                 {name}
               </NavLink>
             ))}
-          </nav>
-          <div className="mb-2 mt-5 border-t border-slate-200 px-3 pt-5 text-[10px] font-semibold tracking-widest text-slate-400">
-            TOOLS &amp; SETTINGS
-          </div>
-          <nav aria-label="Tools and settings" className="space-y-0.5">
-            {tools
-              .filter(([, , to]) => !to.startsWith("/admin/") || isAdmin)
-              .map(([name, Icon, to]) => (
-                <NavLink
-                  key={name}
-                  to={to}
-                  onClick={onClose}
-                  className={linkClass}
-                >
-                  <Icon size={17} strokeWidth={1.7} />
-                  {name}
-                </NavLink>
-              ))}
           </nav>
         </div>
         <div className="px-6 py-3 text-[10px] text-slate-400">

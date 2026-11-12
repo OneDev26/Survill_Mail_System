@@ -1,4 +1,6 @@
-import WorkspaceTabPage from "./WorkspaceTabPage";
+import ScheduledMailPage from "./ScheduledMailPage";
+import SnoozedMailPage from "./SnoozedMailPage";
 export default function TimedMailPage({ kind }) {
-  return <WorkspaceTabPage key={kind} kind={kind} />;
+  if (kind === "snoozed") return <SnoozedMailPage />;
+  return <ScheduledMailPage />;
 }

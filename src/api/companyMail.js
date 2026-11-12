@@ -1,32 +1,10 @@
 import { request } from "./client";
 
 const contracts = {
-  shared: {
-    path: "shared-mailboxes",
-    create: ["mailbox", "conversation", "status", "access", "note"],
-    update: ["status", "access"],
-  },
   directory: {
     path: "company-directory",
     create: ["name", "title", "department", "office", "email"],
     update: ["office"],
-  },
-  scheduled: {
-    path: "scheduled",
-    create: ["subject", "to", "body", "scheduledFor", "status"],
-    update: ["status"],
-    remove: true,
-  },
-  snoozed: {
-    path: "snoozed",
-    create: ["subject", "from", "body", "snoozedUntil", "status"],
-    update: ["status"],
-    remove: true,
-  },
-  approvals: {
-    path: "approvals",
-    create: ["title", "requester", "details", "amount", "status"],
-    update: ["status"],
   },
 };
 function contract(kind) {

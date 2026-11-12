@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  AlarmClock,
   Archive,
   ArrowLeft,
   Download,
@@ -41,6 +42,7 @@ function MessageContent({
   onStar,
   onCompose,
   onLabel,
+  onSnooze,
 }) {
   const labels = useSelector((state) => state.mail.labels);
   const ownEmail = useSelector((state) => state.profile.email);
@@ -86,6 +88,13 @@ function MessageContent({
           label="Mark message as unread"
           onClick={() => onAction("unread", [message.id])}
         />
+        {message.folder === "Inbox" && (
+          <IconButton
+            icon={AlarmClock}
+            label="Snooze message"
+            onClick={() => onSnooze(message)}
+          />
+        )}
         {message.folder !== "Inbox" && (
           <IconButton
             icon={RotateCcw}

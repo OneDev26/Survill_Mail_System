@@ -80,8 +80,7 @@ export default function AppLayout() {
             <p>
               Mailbox changes are saved to your mail server. Closing the
               composer saves its draft. Use Refresh mailbox to check for new
-              mail. Pages marked Preview service save records to the server, but
-              those records may reset when the service restarts.
+              mail.
             </p>
             <button className="btn-primary" onClick={() => setHelp(false)}>
               Got it

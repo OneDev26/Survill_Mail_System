@@ -7,13 +7,11 @@ import workspace from "./slice/workspaceSlice";
 import ui from "./slice/uiSlice";
 import admin from "./slice/adminSlice";
 import sharedMailboxDrafts from "./slice/sharedMailboxDraftsSlice";
-import {
-  directory,
-  shared,
-  scheduled,
-  snoozed,
-  approvals,
-} from "./slice/companyMailSlices";
+import { directory } from "./slice/companyMailSlices";
+import scheduled from "./slice/scheduledEmailSlice";
+import snoozed from "./slice/snoozedEmailSlice";
+import approvals from "./slice/approvalSlice";
+import shared from "./slice/sharedMailboxSlice";
 import { logout } from "./thunks/authThunks";
 
 const combined = combineReducers({

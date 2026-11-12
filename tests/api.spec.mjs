@@ -59,7 +59,8 @@ const companyRecords = {
   approvals: {
     id: "apr-1",
     title: "Office equipment request",
-    requester: "Rohan Mehta",
+    requester: "test@survill.com",
+    requesterId: userId,
     details: "Purchase - Rahul Menta",
     amount: "₹ 1,240.00",
     status: "pending",
@@ -73,6 +74,14 @@ async function mockApi(page, options = {}) {
       [structuredClone(item)],
     ]),
   );
+  companyRows.approvals.push({
+    id: "apr-2",
+    title: "Another user's request",
+    requester: "other@survill.com",
+    details: "Private request details",
+    amount: "₹ 300.00",
+    status: "pending",
+  });
   const user = {
     id: userId,
     email: "test@survill.com",
@@ -127,7 +136,9 @@ async function mockApi(page, options = {}) {
   let message = { ...base },
     draft = null,
     authenticated = false,
-    expired = false;
+    expired = false,
+    isSnoozed = false,
+    snoozedUntil = null;
   let groups = [
     {
       id: 1,
@@ -469,6 +480,14 @@ async function mockApi(page, options = {}) {
       return json({ folders, starredCount: 0 });
     }
     if (path === "/api/labels") return json({ labels: [] });
+    if (
+      path === `/api/folders/${folders[0].id}/mark-read` &&
+      method === "POST"
+    ) {
+      message = { ...message, isRead: true };
+      folders[0].unread = 0;
+      return empty();
+    }
     if (path === "/api/contacts/suggest")
       return json({
         items: [{ email: "recipient@example.com", displayName: "Recipient" }],
@@ -476,15 +495,56 @@ async function mockApi(page, options = {}) {
     if (path === "/api/messages" && method === "GET")
       return json({
         items:
-          url.searchParams.get("folder") === "all" ||
-          message.folderId === url.searchParams.get("folder")
-            ? [message]
-            : [],
-        total: 1,
+          url.searchParams.get("folder") === "snoozed"
+            ? isSnoozed
+              ? [{ ...message, snoozed: true, snoozedUntil }]
+              : []
+            : !isSnoozed &&
+                (url.searchParams.get("folder") === "all" ||
+                  message.folderId === url.searchParams.get("folder"))
+              ? [message]
+              : [],
+        total:
+          url.searchParams.get("folder") === "snoozed"
+            ? Number(isSnoozed)
+            : Number(!isSnoozed),
         page: Number(url.searchParams.get("page")),
         pageSize: Number(url.searchParams.get("pageSize")),
-        totalPages: 2,
+        totalPages: 1,
       });
+    if (path === `/api/messages/${messageId}/snooze` && method === "POST") {
+      if (options.snoozeApiUnavailable)
+        return json({ error: "Snooze API unavailable" }, 404);
+      isSnoozed = true;
+      snoozedUntil = body.snoozeUntil;
+      return json({
+        message: {
+          id: messageId,
+          snoozed: true,
+          snoozedUntil,
+          status: "snoozed",
+        },
+        snooze: { messageId, snoozed: true, snoozedUntil, status: "snoozed" },
+      });
+    }
+    if (path === `/api/messages/${messageId}/unsnooze` && method === "POST") {
+      isSnoozed = false;
+      snoozedUntil = null;
+      return json({
+        message: {
+          id: messageId,
+          snoozed: false,
+          snoozedUntil: null,
+          status: "active",
+        },
+        snooze: {
+          messageId,
+          snoozed: false,
+          snoozedUntil: null,
+          status: "active",
+        },
+      });
+    }
     if (path === `/api/messages/${messageId}`) return json({ message });
     if (path === "/api/messages" && method === "PATCH") {
       if (options.bulkFails)
@@ -497,6 +557,8 @@ async function mockApi(page, options = {}) {
           folderKind: "archive",
         };
       if (body.action === "revert") message = { ...base };
+      if (body.action === "read") message = { ...message, isRead: true };
+      if (body.action === "unread") message = { ...message, isRead: false };
       return json({
         updated: 1,
         undo: {
@@ -604,7 +666,18 @@ async function mockApi(page, options = {}) {
       return json({ configured: false, last: null });
     return json({ error: `Unmocked ${method} ${path}` }, 501);
   });
-  return { calls, user };
+  return {
+    calls,
+    user,
+    snooze: () => {
+      isSnoozed = true;
+      snoozedUntil = "2099-11-07T10:30:00.000Z";
+    },
+    expireSnooze: () => {
+      isSnoozed = false;
+      snoozedUntil = null;
+    },
+  };
 }
 async function login(page) {
   await page.goto("/mail/Inbox");
@@ -793,78 +866,414 @@ test("workspace tabs shared mailbox and directory use documented server fields",
   ).toBeVisible();
 });
 
-for (const kind of ["scheduled", "snoozed"]) {
-  test(`workspace tabs ${kind} create transition and delete use exact contracts`, async ({
-    page,
-  }) => {
-    const { calls } = await mockApi(page);
-    await login(page);
-    await page.goto(`/${kind}`);
-    const scheduling = kind === "scheduled";
-    await expect(page.getByRole("article")).toContainText(
-      scheduling ? "team@example.com" : "supplier@example.com",
-    );
-    await page.getByRole("button", { name: "Create record" }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog
-      .getByLabel("Subject", { exact: true })
-      .fill("New server record");
-    await dialog
-      .getByLabel(scheduling ? "Recipient" : "Sender", { exact: true })
-      .fill("person@example.com");
-    await dialog.getByLabel("Message", { exact: true }).fill("Saved message");
-    const time = dialog.getByLabel(scheduling ? "Send at" : "Return at", {
-      exact: true,
-    });
-    await time.fill("2020-01-01T09:00");
-    await dialog.getByRole("button", { name: "Save record" }).click();
-    await expect(dialog.getByRole("alert")).toContainText("future date");
-    await time.fill("2099-01-01T09:00");
-    await dialog.getByRole("button", { name: "Save record" }).click();
-    await expect(dialog).toHaveCount(0);
-    const payload = calls.find(
-      (c) => c.path === `/api/${kind}` && c.method === "POST",
-    ).body;
-    const timeKey = scheduling ? "scheduledFor" : "snoozedUntil";
-    expect(payload).toEqual({
-      subject: "New server record",
-      [scheduling ? "to" : "from"]: "person@example.com",
-      body: "Saved message",
-      [timeKey]: expect.any(String),
-      status: kind,
-    });
-    expect(payload[timeKey]).toBe(
-      await page.evaluate(() => new Date("2099-01-01T09:00").toISOString()),
-    );
-    const card = page
-      .getByRole("article")
-      .filter({ hasText: "New server record" });
-    await card
-      .getByRole("button", {
-        name: scheduling ? "Cancel schedule" : "Mark active",
-      })
-      .click();
-    await expect(card).toContainText(scheduling ? "cancelled" : "active");
-    expect(
-      calls.find(
-        (c) =>
-          c.path === `/api/${kind}/${kind}-created` && c.method === "PATCH",
-      ).body,
-    ).toEqual({ status: scheduling ? "cancelled" : "active" });
-    await card.getByRole("button", { name: "Delete record" }).click();
-    await page.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(card).toHaveCount(0);
-    expect(
-      calls.some(
-        (c) =>
-          c.path === `/api/${kind}/${kind}-created` && c.method === "DELETE",
-      ),
-    ).toBe(true);
-    expect(calls.some((c) => /\/send$/.test(c.path))).toBe(false);
-  });
-}
+test("shared mailbox settings support rejected status and an optional context note", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.goto("/shared-mailboxes");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByLabel("Status", { exact: true }).selectOption("rejected");
+  await settings.getByRole("button", { name: "Save conversation" }).click();
+  await expect(settings).toHaveCount(0);
+  expect(
+    calls.find(
+      (call) =>
+        call.path === "/api/shared-mailboxes/mb-1" && call.method === "PATCH",
+    ).body,
+  ).toEqual({ status: "rejected", access: "Open" });
 
-test("workspace tabs approvals preserve formatted amounts and approve server records", async ({
+  await page.getByRole("button", { name: "New conversation" }).click();
+  const creator = page.getByRole("dialog");
+  await creator
+    .getByLabel("Mailbox", { exact: true })
+    .fill("support@example.com");
+  await creator
+    .getByLabel("Contact email", { exact: true })
+    .fill("customer@example.com");
+  await creator.getByRole("button", { name: "Save conversation" }).click();
+  await expect(creator).toHaveCount(0);
+  expect(
+    calls.find(
+      (call) => call.path === "/api/shared-mailboxes" && call.method === "POST",
+    ).body,
+  ).toEqual({
+    mailbox: "support@example.com",
+    conversation: "customer@example.com",
+    status: "pending",
+    access: "Open",
+    note: "",
+  });
+});
+
+test("workspace tabs scheduled create transition and delete use exact contracts", async ({
+  page,
+}) => {
+  const kind = "scheduled";
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.goto(`/${kind}`);
+  await expect(page.getByRole("article")).toContainText("team@example.com");
+  await page.getByRole("button", { name: "Schedule email" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Subject", { exact: true }).fill("New server record");
+  await dialog.getByLabel("To", { exact: true }).fill("person@example.com");
+  await dialog.getByLabel("Message", { exact: true }).fill("Saved message");
+  const time = dialog.getByLabel("Send at", { exact: true });
+  await time.fill("2020-01-01T09:00");
+  await dialog.getByRole("button", { name: "Schedule email" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("future date");
+  await time.fill("2099-01-01T09:00");
+  await dialog.getByRole("button", { name: "Schedule email" }).click();
+  await expect(dialog).toHaveCount(0);
+  const payload = calls.find(
+    (c) => c.path === `/api/${kind}` && c.method === "POST",
+  ).body;
+  expect(payload).toEqual({
+    subject: "New server record",
+    to: "person@example.com",
+    body: "Saved message",
+    scheduledFor: expect.any(String),
+    status: kind,
+  });
+  expect(payload.scheduledFor).toBe(
+    await page.evaluate(() => new Date("2099-01-01T09:00").toISOString()),
+  );
+  const card = page
+    .getByRole("article")
+    .filter({ hasText: "New server record" });
+  await card.getByRole("button").click();
+  await page.getByRole("button", { name: "Cancel schedule" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Confirm cancellation" })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Scheduled views" })
+    .getByRole("button", { name: "Cancelled" })
+    .click();
+  await expect(card).toContainText("cancelled");
+  expect(
+    calls.find(
+      (c) => c.path === `/api/${kind}/${kind}-created` && c.method === "PATCH",
+    ).body,
+  ).toEqual({ status: "cancelled" });
+  await card.getByRole("button").click();
+  await page.getByRole("button", { name: "Delete record" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(card).toHaveCount(0);
+  expect(
+    calls.some(
+      (c) => c.path === `/api/${kind}/${kind}-created` && c.method === "DELETE",
+    ),
+  ).toBe(true);
+  expect(calls.some((c) => /\/send$/.test(c.path))).toBe(false);
+});
+
+test("Scheduled email accepts an empty optional body", async ({ page }) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.goto("/scheduled");
+  await page.getByRole("button", { name: "Schedule email" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("To", { exact: true }).fill("person@example.com");
+  await dialog.getByLabel("Subject", { exact: true }).fill("Short reminder");
+  await dialog.getByLabel("Send at", { exact: true }).fill("2099-01-01T09:00");
+  await dialog.getByRole("button", { name: "Schedule email" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find(
+      (call) => call.path === "/api/scheduled" && call.method === "POST",
+    ).body,
+  ).toMatchObject({ body: "", status: "scheduled" });
+});
+
+test("Scheduled list fills the page and opens a half-width preview", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await login(page);
+  await page.goto("/scheduled");
+  const list = page.getByRole("region", { name: "Scheduled message list" });
+  const preview = page.getByRole("region", {
+    name: "Scheduled message preview",
+  });
+  await expect(list.getByRole("article")).toBeVisible();
+  await expect(preview).toBeHidden();
+  const fullWidth = await list.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  await list.getByRole("article").getByRole("button").click();
+  await expect(preview).toBeVisible();
+  const listWidth = await list.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  const previewWidth = await preview.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  expect(Math.abs(listWidth - previewWidth)).toBeLessThan(4);
+  expect(listWidth).toBeLessThan(fullWidth * 0.6);
+  await preview.getByRole("button", { name: "Back to list" }).click();
+  await expect(preview).toBeHidden();
+});
+
+test("Scheduled preview returns to the list on mobile", async ({ page }) => {
+  await mockApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  await page.goto("/scheduled");
+  const list = page.getByRole("region", { name: "Scheduled message list" });
+  const preview = page.getByRole("region", {
+    name: "Scheduled message preview",
+  });
+  await list.getByRole("article").getByRole("button").click();
+  await expect(preview).toBeVisible();
+  await expect(list).toBeHidden();
+  await preview.getByRole("button", { name: "Back to list" }).click();
+  await expect(list).toBeVisible();
+  await expect(preview).toBeHidden();
+});
+
+test("snoozed mail opens its detail pane and returns to the list on mobile", async ({
+  page,
+}) => {
+  const { snooze } = await mockApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  snooze();
+  await page.goto("/snoozed");
+  await expect(
+    page.getByRole("button", { name: "Snooze message" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("article")).toContainText("Server message");
+  await page.getByRole("article").getByRole("button").click();
+  await expect(
+    page.getByRole("heading", { name: "Server message" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to list" }).click();
+  await expect(page.getByRole("article")).toBeVisible();
+  await page.getByLabel("Search snoozed mail").fill("not found");
+  await expect(page.getByText("No matching messages")).toBeVisible();
+});
+
+test("Snoozed list fills the page until a message opens in a half-width preview", async ({
+  page,
+}) => {
+  const { snooze } = await mockApi(page);
+  await login(page);
+  snooze();
+  await page.goto("/snoozed");
+  const list = page.getByRole("region", { name: "Snoozed message list" });
+  const preview = page.getByRole("region", { name: "Snoozed message preview" });
+  await expect(list.getByRole("article")).toBeVisible();
+  await expect(preview).toBeHidden();
+  const fullWidth = await list.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  await list.getByRole("article").getByRole("button").click();
+  await expect(preview).toBeVisible();
+  const listWidth = await list.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  const previewWidth = await preview.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  expect(Math.abs(listWidth - previewWidth)).toBeLessThan(4);
+  expect(listWidth).toBeLessThan(fullWidth * 0.6);
+  await preview.getByRole("button", { name: "Back to list" }).click();
+  await expect(preview).toBeHidden();
+  expect(
+    await list.evaluate((element) => element.getBoundingClientRect().width),
+  ).toBeGreaterThan(fullWidth * 0.95);
+});
+
+test("Snoozed record status and delete use the documented endpoints", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.goto("/snoozed");
+  await page
+    .getByRole("navigation", { name: "Snoozed views" })
+    .getByRole("button", { name: "Records" })
+    .click();
+  await page.getByRole("article").getByRole("button").click();
+  await page.getByRole("button", { name: "End snooze record" }).click();
+  expect(
+    calls.find(
+      (call) =>
+        call.path === "/api/snoozed/snooze-1" && call.method === "PATCH",
+    ).body,
+  ).toEqual({ status: "active" });
+  await page
+    .getByRole("navigation", { name: "Snoozed views" })
+    .getByRole("button", { name: "Ended" })
+    .click();
+  await expect(page.getByRole("article")).toContainText(
+    "Server snoozed message",
+  );
+  await page.getByRole("article").getByRole("button").click();
+  await page.getByRole("button", { name: "Delete record" }).click();
+  await page.getByRole("button", { name: "Confirm delete" }).click();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  expect(
+    calls.some(
+      (call) =>
+        call.path === "/api/snoozed/snooze-1" && call.method === "DELETE",
+    ),
+  ).toBe(true);
+  expect(
+    calls.some(
+      (call) => call.path.endsWith("/snooze") && call.method === "POST",
+    ),
+  ).toBe(false);
+});
+
+test("Inbox snooze hides a real message and unsnooze returns it", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page.getByRole("button", { name: "Snooze Server message" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Return to Inbox at").fill("2099-01-01T09:00");
+  await dialog.getByRole("button", { name: "Snooze", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText("Server message", { exact: true })).toHaveCount(
+    0,
+  );
+  expect(
+    calls.find(
+      (call) =>
+        call.path === `/api/messages/${messageId}/snooze` &&
+        call.method === "POST",
+    ).body,
+  ).toEqual({
+    snoozeUntil: await page.evaluate(() =>
+      new Date("2099-01-01T09:00").toISOString(),
+    ),
+  });
+  await page.goto("/snoozed");
+  await expect(
+    page.getByRole("article").filter({ hasText: "Server message" }),
+  ).toBeVisible();
+  expect(
+    calls.some(
+      (call) =>
+        call.path === "/api/messages" && call.params.folder === "snoozed",
+    ),
+  ).toBe(true);
+  await page.getByRole("article").getByRole("button").click();
+  await page.getByRole("button", { name: "Return to Inbox now" }).click();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  expect(
+    calls.some(
+      (call) =>
+        call.path === `/api/messages/${messageId}/unsnooze` &&
+        call.method === "POST",
+    ),
+  ).toBe(true);
+  await page.goto("/mail/Inbox");
+  await expect(page.getByText("Server message", { exact: true })).toBeVisible();
+});
+
+test("expired snooze returns to Inbox on visibility refresh", async ({
+  page,
+}) => {
+  const { expireSnooze } = await mockApi(page);
+  await login(page);
+  await page.getByRole("button", { name: "Snooze Server message" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Snooze", exact: true })
+    .click();
+  await expect(page.getByText("Server message", { exact: true })).toHaveCount(
+    0,
+  );
+  expireSnooze();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange")),
+  );
+  await expect(page.getByText("Server message", { exact: true })).toBeVisible();
+  await page.goto("/snoozed");
+  await expect(
+    page
+      .getByRole("region", { name: "Snoozed message list" })
+      .getByRole("article"),
+  ).toHaveCount(0);
+});
+
+test("message right-click offers Snooze and read actions; Inbox can mark all read", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page);
+  await login(page);
+  await page
+    .getByText("Server message", { exact: true })
+    .click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "Message actions" });
+  await expect(menu.getByRole("menuitem", { name: "Snooze" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Snooze" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Snooze message" }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancel" })
+    .click();
+  await page
+    .getByText("Server message", { exact: true })
+    .click({ button: "right" });
+  await menu
+    .getByRole("menuitem", { name: "Mark as read", exact: true })
+    .click();
+  expect(
+    calls.some(
+      (call) =>
+        call.path === "/api/messages" &&
+        call.method === "PATCH" &&
+        call.body.action === "read" &&
+        call.body.ids[0] === messageId,
+    ),
+  ).toBe(true);
+  await expect(page.getByText("Mailbox updated.")).toBeVisible();
+  await page.getByRole("button", { name: "Mark all as read" }).click();
+  await expect
+    .poll(
+      () =>
+        calls.some(
+          (call) =>
+            call.path ===
+              "/api/folders/00000000-0000-4000-8000-000000000000/mark-read" &&
+            call.method === "POST",
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
+});
+
+test("failed message snooze keeps the dialog and Inbox message", async ({
+  page,
+}) => {
+  await mockApi(page, { snoozeApiUnavailable: true });
+  await login(page);
+  await page.getByRole("button", { name: "Snooze Server message" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Snooze", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Snooze API unavailable",
+  );
+  await expect(
+    page
+      .getByRole("region", { name: "Message list" })
+      .getByText("Server message", { exact: true }),
+  ).toBeVisible();
+});
+
+test("members see their requests and can submit, but cannot approve", async ({
   page,
 }) => {
   const { calls } = await mockApi(page);
@@ -874,36 +1283,112 @@ test("workspace tabs approvals preserve formatted amounts and approve server rec
   await expect(page.getByRole("article")).toContainText(
     "Purchase - Rahul Menta",
   );
+  await expect(page.getByRole("article")).toHaveCount(1);
+  await expect(page.getByText("Another user's request")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: /reject|withdraw/i }),
+    page.getByRole("button", { name: /approve request/i }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Create record" }).click();
+  await page.getByRole("button", { name: "New request" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Request title").fill("Travel request");
   await dialog
     .getByLabel("Details", { exact: true })
     .fill("Visit Mumbai office");
   await dialog.getByLabel("Amount (formatted text)").fill("₹ 5,000.00");
-  await dialog.getByRole("button", { name: "Save record" }).click();
+  await dialog.getByRole("button", { name: "Send request" }).click();
   await expect(dialog).toHaveCount(0);
   expect(
     calls.find((c) => c.path === "/api/approvals" && c.method === "POST").body,
   ).toEqual({
     title: "Travel request",
-    requester: "Test User",
+    requester: "test@survill.com",
     details: "Visit Mumbai office",
     amount: "₹ 5,000.00",
     status: "pending",
   });
   const card = page.getByRole("article").filter({ hasText: "Travel request" });
-  await card.getByRole("button", { name: "Approve request" }).click();
-  await expect(card).toContainText("approved");
+  await expect(card).toContainText("pending");
+  const blockedDecision = await page.evaluate(async () => {
+    const { store } = await import("/src/redux/store.js");
+    const { approvalActions } =
+      await import("/src/redux/thunks/approvalThunks.js");
+    try {
+      await store
+        .dispatch(
+          approvalActions.update({ id: "apr-1", body: { status: "approved" } }),
+        )
+        .unwrap();
+      return "allowed";
+    } catch (error) {
+      return error.message;
+    }
+  });
+  expect(blockedDecision).toContain("Only administrators");
+  expect(
+    calls.some(
+      (c) => c.path.startsWith("/api/approvals/") && c.method === "PATCH",
+    ),
+  ).toBe(false);
+});
+
+test("admin approval queue reviews requests from all users", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/approvals");
+  await expect(
+    page.getByRole("heading", { name: "Approval queue" }),
+  ).toBeVisible();
+  await expect(page.getByRole("article").first()).toContainText(
+    "test@survill.com",
+  );
+  await expect(page.getByRole("article")).toHaveCount(2);
+  await page
+    .getByRole("article")
+    .first()
+    .getByRole("button", { name: "Review request" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Approve request" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(
+    calls.find((c) => c.path === "/api/approvals/apr-1" && c.method === "PATCH")
+      .body,
+  ).toEqual({ status: "approved" });
+  await page.getByLabel("Status filter").selectOption("all");
+  await expect(
+    page.getByRole("article").filter({ hasText: "Office equipment request" }),
+  ).toContainText("approved");
+});
+
+test("admins can reject a pending approval through the documented PATCH", async ({
+  page,
+}) => {
+  const { calls } = await mockApi(page, { admin: true });
+  await login(page);
+  await page.goto("/admin/approvals");
+  await page
+    .getByRole("article")
+    .filter({ hasText: "Another user's request" })
+    .getByRole("button", { name: "Review request" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Reject request" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(
     calls.find(
-      (c) =>
-        c.path === "/api/approvals/approvals-created" && c.method === "PATCH",
+      (call) => call.path === "/api/approvals/apr-2" && call.method === "PATCH",
     ).body,
-  ).toEqual({ status: "approved" });
+  ).toEqual({ status: "rejected" });
+  await page.getByLabel("Status filter").selectOption("rejected");
+  await expect(page.getByRole("article")).toContainText(
+    "Another user's request",
+  );
 });
 
 test("workspace tabs failure retry retains edits and never substitutes demo records", async ({
@@ -1689,10 +2174,7 @@ test("profile and preferences are sent with documented payloads", async ({
       ),
     )
     .toBe(true);
-  await page
-    .getByRole("navigation", { name: "Tools and settings" })
-    .getByRole("link", { name: "Settings", exact: true })
-    .click();
+  await page.goto("/settings");
   await page.getByLabel("Email signature").fill("<script>not markup</script>");
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect

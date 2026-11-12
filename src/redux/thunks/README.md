@@ -2,7 +2,7 @@
 
 Every UI-triggered API operation is dispatched through Redux Toolkit `createAsyncThunk`. Endpoint paths and Axios calls belong in `src/api`, not components or reducers.
 
-`companyMailThunks.js` contains separate authenticated fetch/create/update action groups for shared mailboxes, the company directory, scheduled mail, snoozed mail, and approvals. Scheduled and snoozed records also support delete. Five separate slices hold server data. See [company mail features](../../../docs/COMPANY_MAIL_FEATURES.md) for contracts and service limitations. All Mail reuses the live mail thunks.
+`companyMailThunks.js` handles the company directory. `scheduledEmailThunks.js` handles scheduled emails; `snoozedEmailThunks.js` handles snoozed records; `sharedMailboxThunks.js` handles shared conversation records and settings; `approvalThunks.js` handles approval requests and admin decisions. Separate collection slices hold server data. See [company mail features](../../../docs/COMPANY_MAIL_FEATURES.md) for contracts and service limitations. All Mail reuses the live mail thunks.
 
 | Module               | Responsibility                                                                  |
 | -------------------- | ------------------------------------------------------------------------------- |

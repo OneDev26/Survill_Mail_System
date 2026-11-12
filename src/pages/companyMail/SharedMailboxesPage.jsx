@@ -11,7 +11,7 @@ import {
   Mail,
 } from "lucide-react";
 import useCompanyMail from "../../hooks/useCompanyMail";
-import { sharedActions } from "../../redux/thunks/companyMailThunks";
+import { sharedActions } from "../../redux/thunks/sharedMailboxThunks";
 import ReplyComposer from "../../components/sharedMailbox/ReplyComposer";
 import ConversationEditor from "../../components/sharedMailbox/ConversationEditor";
 import "./SharedMailboxesPage.css";

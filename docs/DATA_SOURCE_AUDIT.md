@@ -13,6 +13,6 @@ Scope: `src`, public assets, API adapters, Redux slices/thunks and user-facing s
 
 ## Server-side example data remains a separate requirement
 
-The provided WORKSPACE_TABS_API_REFERENCE.md states that shared-mailboxes, scheduled, snoozed, company-directory and approvals use in-memory example data. This frontend cannot distinguish an actual employee from a fixture returned under the same API schema and should not guess or delete records based on names/email domains. The backend engineer must remove production sample seeding, supply real user-scoped persistence, and return empty collections for accounts without data.
+The earlier WORKSPACE_TABS_API_REFERENCE.md described in-memory example data for shared mailboxes, scheduled, snoozed, company directory, and approvals. The later SNOOZED_EMAILS_API_REFERENCE.md describes PostgreSQL storage for snoozed records. This frontend cannot distinguish an actual employee from a fixture returned under the same API schema and should not guess or delete records based on names/email domains. The backend engineer must remove any production sample seeding, supply real user-scoped persistence where still missing, and return empty collections for accounts without data.
 
 See [the current backend handoff](ENDPOINT_GAPS.md) for existing routes, missing operations, proposed contracts and implementation requirements. It supersedes the outdated October backlog that incorrectly listed several now-integrated CRUD resources as missing.

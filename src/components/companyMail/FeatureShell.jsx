@@ -19,10 +19,6 @@ export default function FeatureShell({
           Refresh
         </button>
       </div>
-      <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        <strong>Preview service.</strong> Records are saved to the server, but
-        may reset when the service restarts.
-      </p>
       {resource.error && (
         <div role="alert" className="mb-4 text-sm text-red-600">
           {resource.error}

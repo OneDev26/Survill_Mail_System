@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Dialog from "../Dialog";
-import { sharedActions } from "../../redux/thunks/companyMailThunks";
+import { sharedActions } from "../../redux/thunks/sharedMailboxThunks";
 
 export default function ConversationEditor({ record, resource, onClose }) {
   const [form, setForm] = useState(
@@ -21,8 +21,11 @@ export default function ConversationEditor({ record, resource, onClose }) {
     const body = Object.fromEntries(
       Object.entries(form).map(([key, value]) => [key, value.trim()]),
     );
-    if (Object.values(body).some((value) => !value)) {
-      setError("Complete all fields.");
+    const required = record
+      ? ["status", "access"]
+      : ["mailbox", "conversation", "status", "access"];
+    if (required.some((key) => !body[key])) {
+      setError("Complete the required fields.");
       return;
     }
     if (
@@ -72,7 +75,6 @@ export default function ConversationEditor({ record, resource, onClose }) {
                 <textarea
                   aria-label="Context note"
                   className="field mt-1"
-                  required
                   rows={4}
                   value={form.note}
                   onChange={(event) =>
@@ -93,11 +95,11 @@ export default function ConversationEditor({ record, resource, onClose }) {
                   setForm({ ...form, status: event.target.value })
                 }
               >
-                {[...new Set(["pending", "approved", form.status])].map(
-                  (value) => (
-                    <option key={value}>{value}</option>
-                  ),
-                )}
+                {[
+                  ...new Set(["pending", "approved", "rejected", form.status]),
+                ].map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
               </select>
             </label>
           )}

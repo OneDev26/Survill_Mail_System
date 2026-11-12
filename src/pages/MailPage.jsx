@@ -6,6 +6,7 @@ import {
   fetchMessage,
   fetchFolders,
   bulkUpdateMessages,
+  markFolderRead,
   deleteMessages,
   emptyFolder,
 } from "../redux/thunks/mailThunks";
@@ -15,6 +16,9 @@ import { composeOpened, notify } from "../redux/slice/uiSlice";
 import MailList from "../components/MailList";
 import MessageView from "../components/MessageView";
 import ConfirmDialog from "../components/ConfirmDialog";
+import SnoozeDialog from "../components/mail/SnoozeDialog";
+import { snoozeMessage } from "../redux/thunks/snoozedEmailThunks";
+import { AlarmClock, MailCheck, MailOpen } from "lucide-react";
 
 export default function MailPage() {
   const { folder } = useParams();
@@ -42,6 +46,10 @@ function Mailbox({ folder, query }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirm, setConfirm] = useState(null);
+  const [snoozeTarget, setSnoozeTarget] = useState(null);
+  const [snoozeBusy, setSnoozeBusy] = useState(false);
+  const [snoozeError, setSnoozeError] = useState("");
+  const [contextMenu, setContextMenu] = useState(null);
   const [version, setVersion] = useState(0);
   const folderId =
     folder === "All Mail"
@@ -52,6 +60,20 @@ function Mailbox({ folder, query }) {
   const labelId = folder.startsWith("label:")
     ? mail.labels.find((l) => l.name === folder.slice(6))?.id
     : undefined;
+  useEffect(() => {
+    if (folder !== "Inbox") return;
+    const refreshVisibleInbox = () => {
+      if (document.visibilityState !== "visible") return;
+      setVersion((value) => value + 1);
+      dispatch(fetchFolders());
+    };
+    const timer = window.setInterval(refreshVisibleInbox, 30_000);
+    document.addEventListener("visibilitychange", refreshVisibleInbox);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisibleInbox);
+    };
+  }, [dispatch, folder]);
   useEffect(() => {
     let cancelled = false;
     let request;
@@ -111,6 +133,80 @@ function Mailbox({ folder, query }) {
   const messages = result.items.map((m) =>
     messageModel(m, mail.folders, mail.labels),
   );
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const escape = (event) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [contextMenu]);
+
+  async function snooze(until) {
+    if (!snoozeTarget) return;
+    setSnoozeBusy(true);
+    setSnoozeError("");
+    try {
+      await dispatch(
+        snoozeMessage({ id: snoozeTarget.id, snoozeUntil: until }),
+      ).unwrap();
+      setSnoozeTarget(null);
+      setActive(null);
+      setSelected([]);
+      setVersion((value) => value + 1);
+      try {
+        await dispatch(fetchFolders()).unwrap();
+      } catch {
+        setError("Message snoozed, but folder counts could not refresh.");
+      }
+    } catch (err) {
+      setSnoozeError(err.message);
+    } finally {
+      setSnoozeBusy(false);
+    }
+  }
+
+  async function markAllRead() {
+    if (!folderId) return;
+    setContextMenu(null);
+    setBusy(true);
+    setError("");
+    try {
+      await dispatch(markFolderRead(folderId)).unwrap();
+      setVersion((value) => value + 1);
+      try {
+        await dispatch(fetchFolders()).unwrap();
+      } catch {
+        setError(
+          "Messages marked as read, but folder counts could not refresh.",
+        );
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openSnooze(message) {
+    setContextMenu(null);
+    setSnoozeError("");
+    setSnoozeTarget(message);
+  }
+
+  function openContextMenu(event, message) {
+    event.preventDefault();
+    setContextMenu({
+      message,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 220)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 180)),
+    });
+  }
   async function open(message) {
     try {
       const data = await dispatch(
@@ -256,6 +352,28 @@ function Mailbox({ folder, query }) {
         >
           {folder === "Spam" ? "Not spam" : "Spam"}
         </button>
+        {folder === "Inbox" && (
+          <>
+            <button
+              className="mailbox-toolbar-control inline-flex items-center gap-2"
+              disabled={busy || ids.length !== 1}
+              onClick={() =>
+                openSnooze(
+                  messages.find((message) => message.id === ids[0]) || active,
+                )
+              }
+            >
+              <AlarmClock size={15} /> Snooze
+            </button>
+            <button
+              className="mailbox-toolbar-control inline-flex items-center gap-2"
+              disabled={busy}
+              onClick={markAllRead}
+            >
+              <MailCheck size={15} /> Mark all as read
+            </button>
+          </>
+        )}
         {["Trash", "Spam"].includes(folder) && (
           <>
             <button
@@ -318,6 +436,8 @@ function Mailbox({ folder, query }) {
             perform(m.starred ? "unstar" : "star", [id]);
           }}
           onAction={action}
+          onSnooze={openSnooze}
+          onMessageContextMenu={openContextMenu}
           compact={settings.compact}
           sort={sort}
           onSort={() => {
@@ -334,6 +454,7 @@ function Mailbox({ folder, query }) {
           message={active}
           onClose={() => setActive(null)}
           onAction={action}
+          onSnooze={openSnooze}
           onStar={(id) => perform(active.starred ? "unstar" : "star", [id])}
           onCompose={compose}
           onLabel={(id, name) => {
@@ -355,6 +476,56 @@ function Mailbox({ folder, query }) {
           confirmLabel="Confirm"
           onClose={() => setConfirm(null)}
           onConfirm={() => perform(confirm.action, confirm.ids, confirm.extra)}
+        />
+      )}
+      {contextMenu && (
+        <div
+          role="menu"
+          aria-label="Message actions"
+          className="fixed z-50 min-w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {folder === "Inbox" && (
+            <button
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-brand-50"
+              onClick={() => openSnooze(contextMenu.message)}
+            >
+              <AlarmClock size={15} /> Snooze
+            </button>
+          )}
+          <button
+            role="menuitem"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-brand-50"
+            onClick={() => {
+              action(contextMenu.message.unread ? "read" : "unread", [
+                contextMenu.message.id,
+              ]);
+              setContextMenu(null);
+            }}
+          >
+            <MailOpen size={15} />{" "}
+            {contextMenu.message.unread ? "Mark as read" : "Mark as unread"}
+          </button>
+          {folder === "Inbox" && (
+            <button
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs hover:bg-brand-50"
+              onClick={markAllRead}
+            >
+              <MailCheck size={15} /> Mark all as read
+            </button>
+          )}
+        </div>
+      )}
+      {snoozeTarget && (
+        <SnoozeDialog
+          message={snoozeTarget}
+          busy={snoozeBusy}
+          error={snoozeError}
+          onClose={() => setSnoozeTarget(null)}
+          onSubmit={snooze}
         />
       )}
     </>

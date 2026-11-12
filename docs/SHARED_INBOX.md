@@ -4,7 +4,7 @@ The Shared Mailboxes route now has mailbox navigation, a searchable/filterable c
 
 ## Existing API integration
 
-GET/POST `/api/shared-mailboxes` and PATCH `/api/shared-mailboxes/:id` continue through `companyMailApi`, `sharedActions` and the `shared` slice. Create uses mailbox/conversation/note/status/access. Settings only update status/access. API errors preserve edits; successful writes refresh from the server. Mailbox counts describe loaded records, not unread counts. No sample conversations are generated.
+GET/POST `/api/shared-mailboxes` and PATCH `/api/shared-mailboxes/:id` use the dedicated `sharedMailboxesApi`, `sharedActions`, and `sharedMailboxSlice`. Create sends mailbox/conversation/status/access and an optional note. Settings update only status/access, including the documented `rejected` status. API errors preserve edits; successful writes refresh from the server. Mailbox counts describe loaded records, not unread counts. No sample conversations are generated.
 
 The documented `conversation` field is a contact string and `note` is context. Neither is treated as an email message or a chat history. `access` and `status` are displayed as returned; neither proves membership or send-as authorization.
 
@@ -12,7 +12,7 @@ The documented `conversation` field is a contact string and `note` is context. N
 
 `sharedMailboxDraftsSlice` stores unsent text by mailbox + record ID. It survives tab navigation, but clears on reload or session reset. No browser persistence is used. `ReplyComposer` allows preparing/discarding text but keeps Send disabled because no shared reply API is documented. There is no fake send success, invented thread, fallback to personal-mail sending, or simulated conversation activity.
 
-Components live in `src/components/sharedMailbox`; the dedicated route and scoped styles live in `src/pages/companyMail`. The route is lazy-loaded. Existing workspace APIs are unchanged.
+Components live in `src/components/sharedMailbox`; the dedicated route and scoped styles live in `src/pages/companyMail`. The route is lazy-loaded. Its API, thunk, and slice are in `src/api/sharedMailboxes.js`, `src/redux/thunks/sharedMailboxThunks.js`, and `src/redux/slice/sharedMailboxSlice.js`.
 
 ## Required backend contract for real conversation/chat behavior
 

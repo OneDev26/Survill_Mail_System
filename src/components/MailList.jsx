@@ -1,4 +1,5 @@
 import {
+  AlarmClock,
   Archive,
   ArrowDownWideNarrow,
   CheckCheck,
@@ -33,6 +34,8 @@ export default function MailList({
   setPage,
   pageCount,
   reading,
+  onSnooze,
+  onMessageContextMenu,
 }) {
   const allSelected =
     messages.length > 0 &&
@@ -149,6 +152,7 @@ export default function MailList({
           messages.map((message) => (
             <div
               key={message.id}
+              onContextMenu={(event) => onMessageContextMenu(event, message)}
               className={`group relative flex gap-3 border-b border-slate-100 px-5 transition ${compact ? "py-3" : "py-[18px]"} ${activeId === message.id ? "border-l-[3px] border-l-brand-500 bg-brand-50/70 pl-[17px]" : "border-l-[3px] border-l-transparent pl-[17px] hover:bg-slate-50"} ${selected.includes(message.id) ? "bg-brand-50" : ""}`}
             >
               <div className="flex shrink-0 flex-col items-center gap-3 pt-1">
@@ -225,6 +229,14 @@ export default function MailList({
                   </div>
                 </div>
               </button>
+              {folder === "Inbox" && (
+                <IconButton
+                  icon={AlarmClock}
+                  label={`Snooze ${message.subject || "message"}`}
+                  className="self-start"
+                  onClick={() => onSnooze(message)}
+                />
+              )}
             </div>
           ))
         )}

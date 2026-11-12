@@ -1,6 +1,7 @@
 import { createSlice } from "@reduxjs/toolkit";
 import { folderName, labelModel } from "../../api/models";
 import * as thunks from "../thunks/mailThunks";
+import { snoozeMessage, unsnoozeMessage } from "../thunks/snoozedEmailThunks";
 import { trackRequests } from "../requestState";
 
 function applyFolders(state, payload) {
@@ -46,6 +47,9 @@ const slice = createSlice({
     });
     for (const thunk of [
       thunks.deleteMessages,
+      snoozeMessage,
+      unsnoozeMessage,
+      thunks.markFolderRead,
       thunks.emptyFolder,
       thunks.sendDraft,
       thunks.discardDraft,

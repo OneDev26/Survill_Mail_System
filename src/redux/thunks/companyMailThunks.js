@@ -22,7 +22,3 @@ function collectionThunks(kind, removable = false) {
   };
 }
 export const directoryActions = collectionThunks("directory");
-export const sharedActions = collectionThunks("shared");
-export const scheduledActions = collectionThunks("scheduled", true);
-export const snoozedActions = collectionThunks("snoozed", true);
-export const approvalActions = collectionThunks("approvals");

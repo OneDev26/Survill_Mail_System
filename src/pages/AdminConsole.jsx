@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   RefreshCw,
   Store,
+  ClipboardCheck,
 } from "lucide-react";
 import ConnectedAdmin from "./AdminPage";
 import AdminGroups from "./AdminGroups";
@@ -23,6 +24,7 @@ import AdminDashboard from "./AdminDashboard";
 import AdminSecurity from "./AdminSecurity";
 import AdminInboundLog from "./AdminInboundLog";
 import AdminAuditLog from "./AdminAuditLog";
+import ApprovalsPage from "./companyMail/ApprovalsPage";
 import { sessionUser } from "../utils/access";
 import "./AdminPage.css";
 
@@ -30,6 +32,7 @@ const navigation = [
   ["overview", "Overview", LayoutDashboard],
   ["monitoring", "Email monitoring", Inbox],
   ["users", "Users", Users],
+  ["approvals", "Approvals", ClipboardCheck],
   ["domains", "Domains", Globe],
   ["groups", "Groups", UsersRound],
   ["aliases", "Aliases", AtSign],
@@ -58,6 +61,7 @@ export default function AdminConsole() {
   else if (section === "monitoring") content = <EmailMonitoring />;
   else if (section === "security") content = <AdminSecurity />;
   else if (section === "audit") content = <AdminAuditLog />;
+  else if (section === "approvals") content = <ApprovalsPage admin />;
   else
     content = (
       <div className="admin-empty">

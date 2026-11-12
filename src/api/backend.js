@@ -60,6 +60,7 @@ export const backend = {
   messages: (params, options) => get("/api/messages", params, options),
   message: (key, markRead = true) =>
     get(`/api/messages/${id(key)}`, { markRead }),
+  markFolderRead: (key) => post(`/api/folders/${id(key)}/mark-read`),
   thread: (key) => get(`/api/threads/${id(key)}`),
   bulk: (body) => patch("/api/messages", body),
   deleteMessages: (ids) => del("/api/messages", { ids }),
